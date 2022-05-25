@@ -11,9 +11,10 @@ class timeit:
         start = time.time()
         try:
             logging.debug(f"{func_name} started")
-            return self.func(*args, **kwargs)
+            result = self.func(*args, **kwargs)
         except Exception:
             logging.debug(f"{func_name} errored after {time.time()-start}%s seconds.")
             raise
         else:
             logging.debug(f"{func_name} took {time.time()-start}%s seconds.")
+            return result
