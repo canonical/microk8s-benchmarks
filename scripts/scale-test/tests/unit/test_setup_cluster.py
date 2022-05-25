@@ -49,6 +49,14 @@ def test_deploy_ubuntu_units_deploys_correct_number_of_replicas(_juju):
     _juju.add_unit.assert_called_once_with(units - 1, "microk8s-node")
 
 
+@patch("setup_cluster.juju")
+def test_deploy_ubuntu_units_skips_add_unit_when_single_node_cluster(_juju):
+    deploy_ubuntu_units("foobar", 1)
+
+    _juju.deploy.assert_called_once()
+    _juju.add_unit.assert_not_called()
+
+
 @patch("setup_cluster.juju.status")
 def test_get_units(_juju_status):
     _juju_status().stdout = b"""Model           Controller               Cloud/Region         Version  SLA          Timestamp
