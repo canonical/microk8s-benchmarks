@@ -1,6 +1,5 @@
+import logging
 import subprocess
-
-from benchmarks.logger import logger
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"
@@ -9,14 +8,14 @@ JUJU_WAIT = "/snap/bin/juju-wait"
 def _juju(*args):
     cmd = [JUJU]
     cmd.extend(args)
-    logger.debug(f"subprocess.run {cmd}")
+    logging.debug(f"subprocess.run {cmd}")
     return subprocess.run(cmd, capture_output=True)
 
 
 def _juju_wait(*args):
     cmd = [JUJU_WAIT]
     cmd.extend(args)
-    logger.debug(f"subprocess.run {cmd}")
+    logging.debug(f"subprocess.run {cmd}")
     return subprocess.run(cmd, capture_output=True)
 
 

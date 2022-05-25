@@ -6,7 +6,7 @@ Moreover this evaluation at scale can be used to communicate the exact performan
 
 ## Running the benchmark
 
-### vSphere setup
+### 1. vSphere setup
 
 Currently, we are running it in vSphere/Boston cluster. You will need credentials to access it. Simply run:
 
@@ -21,3 +21,15 @@ You can specify `VS_USER`, `VS_PASS` and `VS_CONTROLLER` environment variables f
 ```bash
 VS_USER="foo" VS_PASS="bar" VS_CONTROLLER="mycontroller" ./scripts/setup-vsphere.sh 
 ```
+
+### 2. Microk8s cluster
+
+Once the vSphere controller has been setup, you can use the `setup_cluster.py` script to create a Microk8s cluster on a new juju model. By default, it will create a single-node cluster on the `microk8s` namespace. However:
+
+```bash
+python scripts/scale-test/setup_cluster.py -m "mycluster" --nodes 10 --control-plane 3
+```
+
+will create a new juju model named `mycluster`, spin up 10 ubuntu instances on it and install `microk8s`. After that, it will join nodes as workers or not depending on the number of control-plane nodes were specified.
+
+Check out `python setup_cluster.py -h` for more detailed instructions on how to use the tool.

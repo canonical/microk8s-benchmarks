@@ -1,33 +1,26 @@
-from unittest.mock import patch, mock_open, call, Mock
+import json
 import sys
+from unittest.mock import Mock, call, mock_open, patch
+
+import pytest
+
+from benchmarks.models import Cluster, Unit
 from setup_cluster import (
+    add_node,
+    deploy_ubuntu_units,
+    get_units,
     join_node_to_cluster,
+    main,
     parse_arguments,
     save_cluster_info,
     setup_microk8s_cluster,
-    add_node,
 )
-from setup_cluster import main
-from setup_cluster import deploy_ubuntu_units
-from setup_cluster import get_units
-from benchmarks.logger import logger
-from benchmarks.models import Unit, Cluster
-import logging
-import pytest
-import json
 
 
 @patch.object(sys, "argv", ["setup_cluster", "-c", "4", "-n", "2"])
 def test_parse_args_validates_node_params():
     with pytest.raises(ValueError):
         parse_arguments()
-
-
-@patch.object(sys, "argv", ["setup_cluster", "--debug"])
-def test_parse_args_sets_debug_log_level():
-    assert logger.level == logging.INFO
-    parse_arguments()
-    assert logger.level == logging.DEBUG
 
 
 @patch.object(sys, "argv", ["setup_cluster", "--destroy-on-error"])

@@ -5,20 +5,23 @@ from argparse import ArgumentParser, Namespace
 from typing import List
 
 from benchmarks import juju
-from benchmarks.logger import logger
 from benchmarks.models import Cluster, Unit
+from benchmarks.utils import timeit
 
 APPLICATION = "microk8s-node"
 MICROK8S_VERSION = "1.24/stable"
 
+logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
+
+@timeit
 def install_microk8s_on_units(model, units: List[Unit]):
     for unit in units:
         configure_proxy_on_unit(unit)
 
     reboot_all_units()
 
-    logger.info(f"Waiting for {model} model...")
+    logging.info(f"Waiting for {model} model...")
     juju.wait_for_model(model)
 
     for unit in units:
@@ -28,14 +31,15 @@ def install_microk8s_on_units(model, units: List[Unit]):
 
 
 def update_etc_hosts_on_units(units: List[Unit]):
-    logger.info("Adding units hostnames on /etc/hosts")
+    logging.info("Adding units hostnames on /etc/hosts")
     for u in units:
         cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
         juju.run(cmd, all=True).check_returncode()
 
 
+@timeit
 def install_microk8s_on_unit(unit: Unit):
-    logger.info(f"Installing microk8s on {unit}")
+    logging.info(f"Installing microk8s on {unit}")
     for cmd, check_returncode in [
         (f"snap install microk8s --classic --channel={MICROK8S_VERSION}", True),
         ("sudo usermod -a -G microk8s ubuntu", True),
@@ -49,8 +53,9 @@ def install_microk8s_on_unit(unit: Unit):
             resp.check_returncode()
 
 
+@timeit
 def configure_proxy_on_unit(unit: Unit):
-    logger.info(f"Configuring proxy settings on {unit}")
+    logging.info(f"Configuring proxy settings on {unit}")
     PROXY = "http://squid.internal:3128"
     NO_PROXY = f"10.1.0.0/16,10.152.183.0/24,127.0.0.1,{unit.ip},{unit.instance_id},10.246.154.0/24"
     for cmd in [
@@ -65,7 +70,7 @@ def configure_proxy_on_unit(unit: Unit):
 
 
 def reboot_all_units():
-    logger.info("Rebooting all units")
+    logging.info("Rebooting all units")
     cmd = "timeout 10 juju run -a -- reboot || true".split()
     subprocess.run(cmd)
 
@@ -78,17 +83,19 @@ def add_node(master) -> List[str]:
     return join_command
 
 
+@timeit
 def join_node_to_cluster(master: Unit, node: Unit, as_worker: bool = False):
-    logger.info(f"Joining {node} to cluster")
+    logging.info(f"Joining {node} to cluster")
     join_command = add_node(master)
     if as_worker:
         join_command += " --worker"
     juju.run(join_command, unit=node.name).check_returncode()
 
 
+@timeit
 def setup_microk8s_cluster(control_plane: int, units: List[Unit]) -> Cluster:
     n_workers = len(units) - control_plane
-    logger.info(
+    logging.info(
         f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
     )
 
@@ -113,7 +120,7 @@ def setup_microk8s_cluster(control_plane: int, units: List[Unit]) -> Cluster:
 
 def save_cluster_info(cluster: Cluster):
     path = "cluster.json"
-    logger.info(f"Saving cluster info to {path}")
+    logging.info(f"Saving cluster info to {path}")
     with open(path, "w") as f:
         f.write(json.dumps(cluster.to_dict()))
 
@@ -135,8 +142,9 @@ def get_units() -> List[Unit]:
     return [Unit(**u) for u in units.values()]
 
 
+@timeit
 def deploy_ubuntu_units(model, n_units: int) -> List[Unit]:
-    logger.info(f"Deploying {n_units} ubuntu charm units")
+    logging.info(f"Deploying {n_units} ubuntu charm units")
     juju.add_model(model).check_returncode()
     juju.deploy(
         "ubuntu",
@@ -184,11 +192,17 @@ def parse_arguments() -> Namespace:
     args = parser.parse_args()
     if args.control_plane > args.nodes:
         raise ValueError("--nodes >= --control-plane")
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
+
+    configure_logging(args.debug)
     return args
 
 
+def configure_logging(debug: bool = False):
+    level = logging.INFO if debug is False else logging.DEBUG
+    logging.root.setLevel(level=level)
+
+
+@timeit
 def main():
     args = parse_arguments()
     try:
@@ -197,9 +211,9 @@ def main():
         cluster = setup_microk8s_cluster(args.control_plane, units)
         save_cluster_info(cluster)
     except Exception:
-        logger.exception("Unexpected error")
+        logging.exception("Unexpected error")
         if args.destroy_on_error:
-            logger.warning(f"Destroying model {args.model}")
+            logging.warning(f"Destroying model {args.model}")
             juju.destroy_model(args.model)
         raise
 
