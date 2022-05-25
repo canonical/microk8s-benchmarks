@@ -1,6 +1,6 @@
 import subprocess
-from benchmarks.logger import logger
 
+from benchmarks.logger import logger
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"

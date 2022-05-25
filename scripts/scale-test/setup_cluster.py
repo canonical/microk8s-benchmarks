@@ -1,16 +1,12 @@
-import subprocess
-from benchmarks import juju
-from benchmarks.models import Cluster
-from benchmarks.models import Unit
-from benchmarks.logger import logger
-
-from argparse import Namespace
-from argparse import ArgumentParser
-
-from typing import List
-import logging
 import json
+import logging
+import subprocess
+from argparse import ArgumentParser, Namespace
+from typing import List
 
+from benchmarks import juju
+from benchmarks.logger import logger
+from benchmarks.models import Cluster, Unit
 
 APPLICATION = "microk8s-node"
 MICROK8S_VERSION = "1.24/stable"
