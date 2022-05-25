@@ -1,7 +1,12 @@
-from ossaudiodev import control_labels
-from unittest.mock import patch, mock_open, call
+from unittest.mock import patch, mock_open, call, Mock
 import sys
-from setup_cluster import parse_arguments, save_cluster_info, setup_microk8s_cluster
+from setup_cluster import (
+    join_node_to_cluster,
+    parse_arguments,
+    save_cluster_info,
+    setup_microk8s_cluster,
+    add_node,
+)
 from setup_cluster import main
 from setup_cluster import deploy_ubuntu_units
 from setup_cluster import get_units
@@ -103,3 +108,42 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node, other_node]
     assert cluster.workers == [third_node]
+
+
+@patch("setup_cluster.juju")
+@patch("setup_cluster.add_node")
+def test_join_node_to_cluster(_add_node, _juju):
+    node = Mock()
+
+    join_node_to_cluster(Mock(), node)
+
+    _juju.run.assert_called_once_with(_add_node.return_value, unit=node.name)
+
+
+@patch("setup_cluster.juju")
+@patch("setup_cluster.add_node", return_value="<join url>")
+def test_join_node_to_cluster_as_worker(_add_node, _juju):
+    node = Mock()
+
+    join_node_to_cluster(Mock(), node, as_worker=True)
+
+    _juju.run.assert_called_once_with("<join url> --worker", unit=node.name)
+
+
+@patch("setup_cluster.juju.run")
+def test_add_node(_juju_run):
+    _juju_run.return_value.stdout = b"""From the node you wish to join to this cluster, run the following:
+microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e
+
+Use the '--worker' flag to join a node as a worker not running the control plane, eg:
+microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e --worker
+
+If the node you are adding is not reachable through the default interface you can use one of the following:
+microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e"""  # noqa
+
+    master = Mock()
+    join_command = add_node(master)
+
+    expected_join_command = "microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e"
+    assert join_command == expected_join_command
+    _juju_run.assert_called_once_with("microk8s add-node", unit=master.name)

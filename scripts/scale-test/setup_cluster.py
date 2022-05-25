@@ -32,7 +32,7 @@ def install_microk8s_on_units(model, units: List[Unit]):
 
 
 def update_etc_hosts_on_units(units: List[Unit]):
-    logger.info(f"Adding units hostnames on /etc/hosts")
+    logger.info("Adding units hostnames on /etc/hosts")
     for u in units:
         cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
         juju.run(cmd, all=True).check_returncode()
@@ -69,8 +69,8 @@ def configure_proxy_on_unit(unit: Unit):
 
 
 def reboot_all_units():
-    logger.info(f"Rebooting all units")
-    cmd = f"timeout 10 juju run -a -- reboot || true".split()
+    logger.info("Rebooting all units")
+    cmd = "timeout 10 juju run -a -- reboot || true".split()
     subprocess.run(cmd)
 
 
