@@ -8,10 +8,12 @@ on:
   pull_request:
     paths:
       - 'scripts/scale-test/**'
+
 jobs:
   check-formatting:
     name: Check Formatting
       runs-on: ubuntu-latest
+
       steps:
         - name: Check out code
           uses: actions/checkout@v3.0.1
@@ -25,6 +27,7 @@ jobs:
   check-unit-tests:
     name: Check Unit Tests
     runs-on: ubuntu-latest
+    
     steps:
       - name: Check out code
         uses: actions/checkout@v3.0.1
