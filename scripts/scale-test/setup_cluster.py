@@ -138,20 +138,14 @@ def get_units() -> List[Unit]:
     """
     Build the list of ubuntu units from the juju status output
     """
-    units = {}
-    juju_status = juju.status().stdout.decode()
-    for line in juju_status.split("\n"):
-        if f"{APP_NAME}/" in line:
-            ip = line.split()[4]
-            unit_name = line.split()[0]
-            unit_name = unit_name.replace("*", "")
-            units[ip] = {"name": unit_name}
-        if "juju-" in line:
-            ip = line.split()[2]
-            instance_id = line.split()[3]
-            units[ip]["ip"] = ip
-            units[ip]["instance_id"] = instance_id
-    return [Unit(**u) for u in units.values()]
+    units = []
+    status = json.loads(juju.status(format="json").stdout.decode())
+    for unit_name, unit_data in status["applications"][APP_NAME]["units"].items():
+        ip = unit_data["public-address"]
+        machine_id = unit_data["machine"]
+        hostname = status["machines"][machine_id]["hostname"]
+        units.append(Unit(name=unit_name, instance_id=hostname, ip=ip))
+    return units
 
 
 @timeit

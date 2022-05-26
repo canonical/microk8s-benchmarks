@@ -32,8 +32,9 @@ def test_destroys_model_on_error(_destroy_model, _deploy):
     _destroy_model.assert_called_once_with("microk8s")
 
 
+@patch("setup_cluster.get_units")
 @patch("setup_cluster.juju")
-def test_deploy_units_deploys_correct_number_of_replicas(_juju):
+def test_deploy_units_deploys_correct_number_of_replicas(_juju, _get_units):
     units = 10
 
     deploy_units("foobar", units)
@@ -42,8 +43,9 @@ def test_deploy_units_deploys_correct_number_of_replicas(_juju):
     _juju.add_unit.assert_called_once_with(units - 1, "microk8s-node")
 
 
+@patch("setup_cluster.get_units")
 @patch("setup_cluster.juju")
-def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
+def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju, _get_units):
     deploy_units("foobar", 1)
 
     _juju.deploy.assert_called_once()
@@ -52,23 +54,10 @@ def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
 
 @patch("setup_cluster.juju.status")
 def test_get_units(_juju_status):
-    _juju_status().stdout = b"""Model           Controller               Cloud/Region         Version  SLA          Timestamp
-microk8s-final  mk8s-testing-controller  mk8s-testing/Boston  2.9.29   unsupported  11:01:19+02:00
-
-App            Version  Status  Scale  Charm   Channel  Rev  Exposed  Message
-microk8s-node  20.04    active     10  ubuntu  stable    19  no       
-
-Unit              Workload  Agent  Machine  Public address  Ports  Message
-microk8s-node/0   active    idle   0        10.246.154.142         
-microk8s-node/1*  active    idle   1        10.246.154.121                
-
-Machine  State    DNS             Inst id        Series  AZ  Message
-0        started  10.246.154.142  juju-bf4ccb-0  focal       powering on
-1        started  10.246.154.121  juju-bf4ccb-1  focal       powering on
-"""  # noqa
+    _juju_status().stdout = b"""{"model":{"name":"microk8s","type":"iaas","controller":"mk8s-testing-controller","cloud":"mk8s-testing","region":"Boston","version":"2.9.29","model-status":{"current":"available","since":"26 May 2022 12:58:26+02:00"},"sla":"unsupported"},"machines":{"0":{"juju-status":{"current":"started","since":"26 May 2022 13:02:29+02:00","version":"2.9.29"},"hostname":"juju-c6c89a-0","dns-name":"10.246.154.108","ip-addresses":["10.246.154.108"],"instance-id":"juju-c6c89a-0","machine-status":{"current":"allocating","message":"powering on","since":"26 May 2022 12:58:46+02:00"},"modification-status":{"current":"idle","since":"26 May 2022 12:58:35+02:00"},"series":"focal","network-interfaces":{"ens192":{"ip-addresses":["10.246.154.108"],"mac-address":"00:50:56:09:5c:07","gateway":"10.246.154.1","is-up":true}},"constraints":"arch=amd64 cores=2 mem=4096M root-disk=40960M","hardware":"arch=amd64 cores=2 mem=4096M root-disk=40960M root-disk-source=vsanDatastore"},"1":{"juju-status":{"current":"started","since":"26 May 2022 13:02:29+02:00","version":"2.9.29"},"hostname":"juju-c6c89a-1","dns-name":"10.246.154.111","ip-addresses":["10.246.154.111"],"instance-id":"juju-c6c89a-1","machine-status":{"current":"allocating","message":"powering on","since":"26 May 2022 12:58:46+02:00"},"modification-status":{"current":"idle","since":"26 May 2022 12:58:35+02:00"},"series":"focal","network-interfaces":{"ens192":{"ip-addresses":["10.246.154.111"],"mac-address":"00:50:56:09:5c:07","gateway":"10.246.154.1","is-up":true}},"constraints":"arch=amd64 cores=2 mem=4096M root-disk=40960M","hardware":"arch=amd64 cores=2 mem=4096M root-disk=40960M root-disk-source=vsanDatastore"}},"applications":{"microk8s-node":{"charm":"ubuntu","series":"focal","os":"ubuntu","charm-origin":"charmhub","charm-name":"ubuntu","charm-rev":19,"charm-channel":"stable","exposed":false,"application-status":{"current":"active","since":"26 May 2022 13:02:30+02:00"},"units":{"microk8s-node/0":{"workload-status":{"current":"active","since":"26 May 2022 13:02:30+02:00"},"juju-status":{"current":"idle","since":"26 May 2022 13:02:32+02:00","version":"2.9.29"},"leader":true,"machine":"0","public-address":"10.246.154.108"},"microk8s-node/1":{"workload-status":{"current":"active","since":"26 May 2022 13:02:30+02:00"},"juju-status":{"current":"idle","since":"26 May 2022 13:02:32+02:00","version":"2.9.29"},"leader":false,"machine":"1","public-address":"10.246.154.111"}},"version":"20.04"}},"storage":{},"controller":{"timestamp":"13:03:13+02:00"}}"""  # noqa
     expected_units = [
-        Unit(name="microk8s-node/0", ip="10.246.154.142", instance_id="juju-bf4ccb-0"),
-        Unit(name="microk8s-node/1", ip="10.246.154.121", instance_id="juju-bf4ccb-1"),
+        Unit(name="microk8s-node/0", ip="10.246.154.108", instance_id="juju-c6c89a-0"),
+        Unit(name="microk8s-node/1", ip="10.246.154.111", instance_id="juju-c6c89a-1"),
     ]
     assert get_units() == expected_units
 

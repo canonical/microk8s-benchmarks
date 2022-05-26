@@ -44,8 +44,11 @@ def add_unit(units: int, application_name):
     return _juju("add-unit", "-n", str(units), application_name)
 
 
-def status():
-    return _juju("status")
+def status(format: str = None):
+    cmd = ["status"]
+    if format:
+        cmd.append(f"--format={format}")
+    return _juju(*cmd)
 
 
 def wait_for_model(model):
