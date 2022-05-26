@@ -15,7 +15,7 @@ logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
 
 @timeit
-def install_microk8s_on_units(model, units: List[Unit]):
+def setup_microk8s_on_units(model, units: List[Unit]):
     for unit in units:
         configure_proxy_on_unit(unit)
 
@@ -24,8 +24,7 @@ def install_microk8s_on_units(model, units: List[Unit]):
     logging.info(f"Waiting for {model} model...")
     juju.wait_for_model(model)
 
-    for unit in units:
-        install_microk8s_on_unit(unit)
+    install_microk8s_on_units()
 
     update_etc_hosts_on_units(units)
 
@@ -38,8 +37,8 @@ def update_etc_hosts_on_units(units: List[Unit]):
 
 
 @timeit
-def install_microk8s_on_unit(unit: Unit):
-    logging.info(f"Installing microk8s on {unit}")
+def install_microk8s_on_units():
+    logging.info("Installing microk8s on all units")
     for cmd, check_returncode in [
         (f"snap install microk8s --classic --channel={MICROK8S_VERSION}", True),
         ("sudo usermod -a -G microk8s ubuntu", True),
@@ -48,7 +47,7 @@ def install_microk8s_on_unit(unit: Unit):
         ("microk8s start", True),
         ("microk8s status --wait-ready", True),
     ]:
-        resp = juju.run(cmd, unit=unit.name)
+        resp = juju.run(cmd, all=True)
         if check_returncode:
             resp.check_returncode()
 
@@ -207,7 +206,7 @@ def main():
     args = parse_arguments()
     try:
         units = deploy_ubuntu_units(args.model, args.nodes)
-        install_microk8s_on_units(args.model, units)
+        setup_microk8s_on_units(args.model, units)
         cluster = setup_microk8s_cluster(args.control_plane, units)
         save_cluster_info(cluster)
     except Exception:
