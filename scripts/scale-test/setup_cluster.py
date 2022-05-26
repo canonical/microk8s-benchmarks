@@ -8,7 +8,7 @@ from benchmarks import juju
 from benchmarks.models import Cluster, Unit
 from benchmarks.utils import timeit
 
-APPLICATION = "microk8s-node"
+APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
 
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
@@ -31,7 +31,7 @@ def update_etc_hosts(units: List[Unit]):
     logging.info("Adding units hostnames on /etc/hosts")
     for u in units:
         cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
-        juju.run(cmd, app=APPLICATION).check_returncode()
+        juju.run(cmd, app=APP_NAME).check_returncode()
 
 
 @timeit
@@ -45,7 +45,7 @@ def install_snap(channel: str):
         ("microk8s start", True),
         ("microk8s status --wait-ready", True),
     ]:
-        resp = juju.run(cmd, app=APPLICATION)
+        resp = juju.run(cmd, app=APP_NAME)
         if check_returncode:
             resp.check_returncode()
 
@@ -60,7 +60,7 @@ def configure_proxy(units: List[Unit]):
         f"echo https_proxy={PROXY} >> /etc/environment",
         f"echo http_proxy={PROXY} >> /etc/environment",
     ]:
-        juju.run(cmd, app=APPLICATION).check_returncode()
+        juju.run(cmd, app=APP_NAME).check_returncode()
 
     # NO_PROXY settings is unit-specific
     for unit in units:
@@ -73,9 +73,12 @@ def configure_proxy(units: List[Unit]):
 
 
 def reboot_and_wait(model):
+    """
+    Reboots all units in the model and then waits for them to be up.
+    """
     logging.info("Rebooting all units")
-    cmd = "timeout 10 juju run -a -- reboot || true".split()
-    subprocess.run(cmd).check_returncode()
+    cmd = f"timeout 10 juju run -a {APP_NAME} -- reboot".split()
+    subprocess.run(cmd)
 
     logging.info(f"Waiting for {model} model...")
     juju.wait_for_model(model)
@@ -138,7 +141,7 @@ def get_units() -> List[Unit]:
     units = {}
     juju_status = juju.status().stdout.decode()
     for line in juju_status.split("\n"):
-        if f"{APPLICATION}/" in line:
+        if f"{APP_NAME}/" in line:
             ip = line.split()[4]
             unit_name = line.split()[0]
             unit_name = unit_name.replace("*", "")
@@ -159,11 +162,11 @@ def deploy_units(model, n_units: int) -> List[Unit]:
         "ubuntu",
         "--series=focal",
         "--constraints=mem=4G cores=2 root-disk=40G",
-        APPLICATION,
+        APP_NAME,
     ).check_returncode()
     replicas = n_units - 1
     if replicas > 0:
-        juju.add_unit(replicas, APPLICATION).check_returncode()
+        juju.add_unit(replicas, APP_NAME).check_returncode()
     juju.wait_for_model(model)
     return get_units()
 
