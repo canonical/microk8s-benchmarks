@@ -10,13 +10,17 @@ from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
+DEFAULT_HTTP_PROXY = "http://squid.internal:3128"
 
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
 
 @timeit
-def install_microk8s(model, units: List[Unit], channel=DEFAULT_CHANNEL):
-    configure_proxy(units)
+def install_microk8s(
+    model, units: List[Unit], channel=DEFAULT_CHANNEL, http_proxy: str = None
+):
+    if http_proxy is not None:
+        configure_http_proxy(units)
     reboot_and_wait(model)
     install_snap(channel)
     update_etc_hosts(units)
@@ -51,14 +55,13 @@ def install_snap(channel: str):
 
 
 @timeit
-def configure_proxy(units: List[Unit]):
+def configure_http_proxy(units: List[Unit], http_proxy: str):
     logging.info("Configuring proxy settings on units")
-    PROXY = "http://squid.internal:3128"
     for cmd in [
-        f"echo HTTPS_PROXY={PROXY} >> /etc/environment",
-        f"echo HTTP_PROXY={PROXY} >> /etc/environment",
-        f"echo https_proxy={PROXY} >> /etc/environment",
-        f"echo http_proxy={PROXY} >> /etc/environment",
+        f"echo HTTPS_PROXY={http_proxy} >> /etc/environment",
+        f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
+        f"echo https_proxy={http_proxy} >> /etc/environment",
+        f"echo http_proxy={http_proxy} >> /etc/environment",
     ]:
         juju.run(cmd, app=APP_NAME).check_returncode()
 
@@ -195,6 +198,12 @@ def parse_arguments() -> Namespace:
         help="Name of the juju model where the cluster is created",
     )
     parser.add_argument(
+        "--http-proxy",
+        type=str,
+        help="Url of the http proxy to configure nodes with",
+        default=None,
+    )
+    parser.add_argument(
         "--destroy-on-error",
         action="store_true",
         help="Will destroy the juju model if an error occurs",
@@ -219,7 +228,9 @@ def main():
     args = parse_arguments()
     try:
         units = deploy_units(args.model, args.nodes)
-        install_microk8s(args.model, units, channel=args.channel)
+        install_microk8s(
+            args.model, units, channel=args.channel, http_proxy=args.http_proxy
+        )
         cluster = setup_cluster(args.control_plane, units)
         save_cluster_info(cluster)
     except Exception:

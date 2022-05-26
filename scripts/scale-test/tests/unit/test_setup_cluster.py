@@ -9,6 +9,7 @@ from setup_cluster import (
     add_node,
     deploy_units,
     get_units,
+    install_microk8s,
     join_node_to_cluster,
     main,
     parse_arguments,
@@ -137,3 +138,19 @@ microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e
     expected_join_command = "microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e"
     assert join_command == expected_join_command
     _juju_run.assert_called_once_with("microk8s add-node", unit=master.name)
+
+
+@patch("setup_cluster.update_etc_hosts")
+@patch("setup_cluster.install_snap")
+@patch("setup_cluster.reboot_and_wait")
+@patch("setup_cluster.configure_http_proxy")
+def install_microk8s_configures_http_proxy_only_if_provided(
+    _configure_http_proxy, _reboot_and_wait, _install_snap, update_etc_hosts
+):
+    units = []
+    http_proxy = "http://myproxy"
+    install_microk8s(Mock(), units)
+    _configure_http_proxy.assert_not_called()
+
+    install_microk8s(Mock(), units, http_proxy=http_proxy)
+    _configure_http_proxy.assert_called_once_with(units)
