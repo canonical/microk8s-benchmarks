@@ -4,10 +4,11 @@ from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
 
+from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
 from benchmarks.models import Cluster, Unit
 from setup_cluster import (
-    add_node,
     deploy_units,
+    get_join_cluster_url,
     get_units,
     install_microk8s,
     join_node_to_cluster,
@@ -74,8 +75,11 @@ def test_save_cluster_info():
         _open().write.assert_called_once_with(json.dumps(cluster.to_dict()))
 
 
+@patch("setup_cluster.get_join_cluster_url")
 @patch("setup_cluster.join_node_to_cluster")
-def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
+def test_setup_cluster_joins_correct_number_of_worker_nodes(
+    _join_node_to_cluster, _get_join_cluster_url
+):
     master_node = Unit(name="master", ip="masterip", instance_id="masterid")
     other_node = Unit(name="node1", ip="node1ip", instance_id="node1id")
     third_node = Unit(name="third", ip="thirdip", instance_id="thirdid")
@@ -84,7 +88,9 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
     units = [master_node, other_node]
     cluster = setup_cluster(1, units)
 
-    _join.assert_called_once_with(master_node, other_node, as_worker=True)
+    _get_join_cluster_url.assert_called_once_with(master_node)
+    join_url = _get_join_cluster_url.return_value
+    _join_node_to_cluster.assert_called_once_with(other_node, join_url, as_worker=True)
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node]
     assert cluster.workers == [other_node]
@@ -93,8 +99,8 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
     units = [master_node, other_node, third_node]
     cluster = setup_cluster(2, units)
 
-    _join.assert_has_calls(
-        [call(master_node, other_node), call(master_node, third_node, as_worker=True)]
+    _join_node_to_cluster.assert_has_calls(
+        [call(other_node, join_url), call(third_node, join_url, as_worker=True)]
     )
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node, other_node]
@@ -102,42 +108,38 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
 
 
 @patch("setup_cluster.juju")
-@patch("setup_cluster.add_node")
-def test_join_node_to_cluster(_add_node, _juju):
+def test_join_node_to_cluster(_juju):
     node = Mock()
+    join_url = "joinme"
 
-    join_node_to_cluster(Mock(), node)
+    join_node_to_cluster(node, join_url)
 
-    _juju.run.assert_called_once_with(_add_node.return_value, unit=node.name)
+    _juju.run.assert_called_once_with(f"microk8s join {join_url}", unit=node.name)
 
 
 @patch("setup_cluster.juju")
-@patch("setup_cluster.add_node", return_value="<join url>")
-def test_join_node_to_cluster_as_worker(_add_node, _juju):
+def test_join_node_to_cluster_as_worker(_juju):
     node = Mock()
+    join_url = "joinme"
 
-    join_node_to_cluster(Mock(), node, as_worker=True)
+    join_node_to_cluster(node, join_url, as_worker=True)
 
-    _juju.run.assert_called_once_with("<join url> --worker", unit=node.name)
+    _juju.run.assert_called_once_with(
+        f"microk8s join {join_url} --worker", unit=node.name
+    )
 
 
 @patch("setup_cluster.juju.run")
-def test_add_node(_juju_run):
-    _juju_run.return_value.stdout = b"""From the node you wish to join to this cluster, run the following:
-microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e
+def test_get_join_cluster_url(_juju_run):
+    master = Mock(name="foo")
 
-Use the '--worker' flag to join a node as a worker not running the control plane, eg:
-microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e --worker
+    join_url = get_join_cluster_url(master)
 
-If the node you are adding is not reachable through the default interface you can use one of the following:
-microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e"""  # noqa
-
-    master = Mock()
-    join_command = add_node(master)
-
-    expected_join_command = "microk8s join 10.246.154.142:25000/831029c78305abaf849b17dc273ddc0e/f5824339f97e"
-    assert join_command == expected_join_command
-    _juju_run.assert_called_once_with("microk8s add-node", unit=master.name)
+    assert join_url == f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
+    _juju_run.assert_called_once_with(
+        f"microk8s add-node --token {DEFAULT_ADD_NODE_TOKEN} --token-ttl {DEFAULT_ADD_NODE_TOKEN_TTL}",
+        unit=master.name,
+    )
 
 
 @patch("setup_cluster.update_etc_hosts")
