@@ -5,12 +5,13 @@ from argparse import ArgumentParser, Namespace
 from typing import List
 
 from benchmarks import juju
+from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
 from benchmarks.models import Cluster, Unit
 from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
-DEFAULT_HTTP_PROXY = "http://squid.internal:3128"
+
 
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
@@ -20,7 +21,7 @@ def install_microk8s(
     model, units: List[Unit], channel=DEFAULT_CHANNEL, http_proxy: str = None
 ):
     if http_proxy is not None:
-        configure_http_proxy(units)
+        configure_http_proxy(units, http_proxy)
     reboot_and_wait(model)
     install_snap(channel)
     update_etc_hosts(units)
@@ -87,18 +88,20 @@ def reboot_and_wait(model):
     juju.wait_for_model(model)
 
 
-def add_node(master) -> List[str]:
-    resp = juju.run("microk8s add-node", unit=master.name)
-    resp.check_returncode()
-    output = resp.stdout.decode().split("\n")
-    join_command = [line for line in output if "microk8s join" in line][0]
-    return join_command
+def get_join_cluster_url(master) -> str:
+    """
+    Executes the microk8s add-node command at the master node with a non-expiring fixed token.
+    After that, any other node can join the cluster with the returned join url.
+    """
+    cmd = f"microk8s add-node --token {DEFAULT_ADD_NODE_TOKEN} --token-ttl {DEFAULT_ADD_NODE_TOKEN_TTL}"
+    juju.run(cmd, unit=master.name).check_returncode()
+    return f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
 
 
 @timeit
-def join_node_to_cluster(master: Unit, node: Unit, as_worker: bool = False):
+def join_node_to_cluster(node: Unit, join_url: str, as_worker: bool = False):
     logging.info(f"Joining {node} to cluster")
-    join_command = add_node(master)
+    join_command = f"microk8s join {join_url}"
     if as_worker:
         join_command += " --worker"
     juju.run(join_command, unit=node.name).check_returncode()
@@ -110,22 +113,21 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
     logging.info(
         f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
     )
-
-    master_node = units[0]
+    master_node = units.pop(0)
     control_plane -= 1  # master is running control plane already
     cluster = Cluster(master=master_node, control_plane=[master_node], workers=[])
-    if len(units) > 1:
-        other_nodes = units[1:]
-    else:
-        other_nodes = []
+    if len(units) == 0:
+        # Single-node cluster. No nodes to join
+        return cluster
 
-    for node in other_nodes:
+    join_url = get_join_cluster_url(master_node)
+    for node in units:
         if control_plane > 0:
-            join_node_to_cluster(master_node, node)
+            join_node_to_cluster(node, join_url)
             control_plane -= 1
             cluster.control_plane.append(node)
         else:
-            join_node_to_cluster(master_node, node, as_worker=True)
+            join_node_to_cluster(node, join_url, as_worker=True)
             cluster.workers.append(node)
     return cluster
 
@@ -200,7 +202,7 @@ def parse_arguments() -> Namespace:
     parser.add_argument(
         "--http-proxy",
         type=str,
-        help="Url of the http proxy to configure nodes with",
+        help="Url of the http and https proxy to configure units with",
         default=None,
     )
     parser.add_argument(
@@ -223,6 +225,11 @@ def configure_logging(debug: bool = False):
     logging.root.setLevel(level=level)
 
 
+def destroy_model(model: str):
+    logging.warning(f"Destroying model {model}")
+    juju.destroy_model(model)
+
+
 @timeit
 def main():
     args = parse_arguments()
@@ -236,8 +243,7 @@ def main():
     except Exception:
         logging.exception("Unexpected error")
         if args.destroy_on_error:
-            logging.warning(f"Destroying model {args.model}")
-            juju.destroy_model(args.model)
+            destroy_model(args.model)
         raise
 
 
