@@ -33,7 +33,7 @@ def update_etc_hosts_on_units(units: List[Unit]):
     logging.info("Adding units hostnames on /etc/hosts")
     for u in units:
         cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
-        juju.run(cmd, all=True).check_returncode()
+        juju.run(cmd, app=APPLICATION).check_returncode()
 
 
 @timeit
@@ -47,7 +47,7 @@ def install_microk8s_on_units():
         ("microk8s start", True),
         ("microk8s status --wait-ready", True),
     ]:
-        resp = juju.run(cmd, all=True)
+        resp = juju.run(cmd, app=APPLICATION)
         if check_returncode:
             resp.check_returncode()
 

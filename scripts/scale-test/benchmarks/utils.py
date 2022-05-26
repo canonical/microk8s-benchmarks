@@ -13,8 +13,10 @@ class timeit:
             logging.debug(f"{func_name} started")
             result = self.func(*args, **kwargs)
         except Exception:
-            logging.debug(f"{func_name} errored after {time.time()-start}%s seconds.")
+            logging.debug(
+                f"{func_name} errored after {int(time.time()-start)} seconds."
+            )
             raise
         else:
-            logging.debug(f"{func_name} took {time.time()-start}%s seconds.")
+            logging.debug(f"{func_name} took {int(time.time()-start)} seconds.")
             return result

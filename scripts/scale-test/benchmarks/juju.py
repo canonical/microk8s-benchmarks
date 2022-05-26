@@ -19,14 +19,15 @@ def _juju_wait(*args):
     return subprocess.run(cmd, capture_output=True)
 
 
-def run(*command, unit=None, all=False):
-    if unit is None and all is False:
-        raise ValueError("Need to either specify a unit or all=True")
-    if unit is not None and all is True:
-        raise ValueError("Can't specify unit and all=True")
-
-    if all is True:
-        return _juju("run", "-a", "--", *command)
+def run(*command, unit=None, app=None):
+    """
+    Run a command on a juju unit or on all units of a particular application
+    """
+    args = [unit, app]
+    if all(args) or not any(args):
+        raise ValueError("Need to specify either a unit or an app")
+    if app:
+        return _juju("run", "-a", app, "--", *command)
     else:
         return _juju("run", "-u", unit, "--", *command)
 
