@@ -9,27 +9,25 @@ from benchmarks.models import Cluster, Unit
 from benchmarks.utils import timeit
 
 APPLICATION = "microk8s-node"
-MICROK8S_VERSION = "1.24/stable"
+DEFAULT_CHANNEL = "1.24/stable"
 
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
 
 @timeit
-def setup_microk8s_on_units(model, units: List[Unit]):
-    for unit in units:
-        configure_proxy_on_unit(unit)
-
-    reboot_all_units()
-
-    logging.info(f"Waiting for {model} model...")
-    juju.wait_for_model(model)
-
-    install_microk8s_on_units()
-
-    update_etc_hosts_on_units(units)
+def install_microk8s(model, units: List[Unit], channel=DEFAULT_CHANNEL):
+    configure_proxy(units)
+    reboot_and_wait(model)
+    install_snap(channel)
+    update_etc_hosts(units)
 
 
-def update_etc_hosts_on_units(units: List[Unit]):
+def update_etc_hosts(units: List[Unit]):
+    """
+    Add entries in /etc/hosts of all units for each node in the cluster.
+    This is needed as nodes's hostnames need to be resolvable in order for
+    the add-node/join process to work.
+    """
     logging.info("Adding units hostnames on /etc/hosts")
     for u in units:
         cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
@@ -37,10 +35,10 @@ def update_etc_hosts_on_units(units: List[Unit]):
 
 
 @timeit
-def install_microk8s_on_units():
+def install_snap(channel: str):
     logging.info("Installing microk8s on all units")
     for cmd, check_returncode in [
-        (f"snap install microk8s --classic --channel={MICROK8S_VERSION}", True),
+        (f"snap install microk8s --classic --channel={channel}", True),
         ("sudo usermod -a -G microk8s ubuntu", True),
         ("sudo chown -f -R ubuntu ~/.kube", False),
         ("sudo newgrp microk8s", True),
@@ -53,25 +51,34 @@ def install_microk8s_on_units():
 
 
 @timeit
-def configure_proxy_on_unit(unit: Unit):
-    logging.info(f"Configuring proxy settings on {unit}")
+def configure_proxy(units: List[Unit]):
+    logging.info("Configuring proxy settings on units")
     PROXY = "http://squid.internal:3128"
-    NO_PROXY = f"10.1.0.0/16,10.152.183.0/24,127.0.0.1,{unit.ip},{unit.instance_id},10.246.154.0/24"
     for cmd in [
         f"echo HTTPS_PROXY={PROXY} >> /etc/environment",
         f"echo HTTP_PROXY={PROXY} >> /etc/environment",
-        f"echo NO_PROXY={NO_PROXY} >> /etc/environment",
         f"echo https_proxy={PROXY} >> /etc/environment",
         f"echo http_proxy={PROXY} >> /etc/environment",
-        f"echo no_proxy={NO_PROXY} >> /etc/environment",
     ]:
-        juju.run(cmd, unit=unit.name).check_returncode()
+        juju.run(cmd, app=APPLICATION).check_returncode()
+
+    # NO_PROXY settings is unit-specific
+    for unit in units:
+        NO_PROXY = f"10.1.0.0/16,10.152.183.0/24,127.0.0.1,{unit.ip},{unit.instance_id},10.246.154.0/24"
+        for cmd in [
+            f"echo no_proxy={NO_PROXY} >> /etc/environment",
+            f"echo NO_PROXY={NO_PROXY} >> /etc/environment",
+        ]:
+            juju.run(cmd, unit=unit.name).check_returncode()
 
 
-def reboot_all_units():
+def reboot_and_wait(model):
     logging.info("Rebooting all units")
     cmd = "timeout 10 juju run -a -- reboot || true".split()
-    subprocess.run(cmd)
+    subprocess.run(cmd).check_returncode()
+
+    logging.info(f"Waiting for {model} model...")
+    juju.wait_for_model(model)
 
 
 def add_node(master) -> List[str]:
@@ -92,7 +99,7 @@ def join_node_to_cluster(master: Unit, node: Unit, as_worker: bool = False):
 
 
 @timeit
-def setup_microk8s_cluster(control_plane: int, units: List[Unit]) -> Cluster:
+def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
     n_workers = len(units) - control_plane
     logging.info(
         f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
@@ -125,6 +132,9 @@ def save_cluster_info(cluster: Cluster):
 
 
 def get_units() -> List[Unit]:
+    """
+    Build the list of ubuntu units from the juju status output
+    """
     units = {}
     juju_status = juju.status().stdout.decode()
     for line in juju_status.split("\n"):
@@ -142,7 +152,7 @@ def get_units() -> List[Unit]:
 
 
 @timeit
-def deploy_ubuntu_units(model, n_units: int) -> List[Unit]:
+def deploy_units(model, n_units: int) -> List[Unit]:
     logging.info(f"Deploying {n_units} ubuntu charm units")
     juju.add_model(model).check_returncode()
     juju.deploy(
@@ -160,6 +170,12 @@ def deploy_ubuntu_units(model, n_units: int) -> List[Unit]:
 
 def parse_arguments() -> Namespace:
     parser = ArgumentParser()
+    parser.add_argument(
+        "--channel",
+        type=str,
+        default=DEFAULT_CHANNEL,
+        help="Microk8s snap channel to install",
+    )
     parser.add_argument(
         "-n",
         "--nodes",
@@ -205,9 +221,9 @@ def configure_logging(debug: bool = False):
 def main():
     args = parse_arguments()
     try:
-        units = deploy_ubuntu_units(args.model, args.nodes)
-        setup_microk8s_on_units(args.model, units)
-        cluster = setup_microk8s_cluster(args.control_plane, units)
+        units = deploy_units(args.model, args.nodes)
+        install_microk8s(args.model, units, channel=args.channel)
+        cluster = setup_cluster(args.control_plane, units)
         save_cluster_info(cluster)
     except Exception:
         logging.exception("Unexpected error")

@@ -7,13 +7,13 @@ import pytest
 from benchmarks.models import Cluster, Unit
 from setup_cluster import (
     add_node,
-    deploy_ubuntu_units,
+    deploy_units,
     get_units,
     join_node_to_cluster,
     main,
     parse_arguments,
     save_cluster_info,
-    setup_microk8s_cluster,
+    setup_cluster,
 )
 
 
@@ -24,7 +24,7 @@ def test_parse_args_validates_node_params():
 
 
 @patch.object(sys, "argv", ["setup_cluster", "--destroy-on-error"])
-@patch("setup_cluster.deploy_ubuntu_units", side_effect=Exception)
+@patch("setup_cluster.deploy_units", side_effect=Exception)
 @patch("setup_cluster.juju.destroy_model")
 def test_destroys_model_on_error(_destroy_model, _deploy):
     with pytest.raises(Exception):
@@ -33,18 +33,18 @@ def test_destroys_model_on_error(_destroy_model, _deploy):
 
 
 @patch("setup_cluster.juju")
-def test_deploy_ubuntu_units_deploys_correct_number_of_replicas(_juju):
+def test_deploy_units_deploys_correct_number_of_replicas(_juju):
     units = 10
 
-    deploy_ubuntu_units("foobar", units)
+    deploy_units("foobar", units)
 
     _juju.deploy.assert_called_once()
     _juju.add_unit.assert_called_once_with(units - 1, "microk8s-node")
 
 
 @patch("setup_cluster.juju")
-def test_deploy_ubuntu_units_skips_add_unit_when_single_node_cluster(_juju):
-    deploy_ubuntu_units("foobar", 1)
+def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
+    deploy_units("foobar", 1)
 
     _juju.deploy.assert_called_once()
     _juju.add_unit.assert_not_called()
@@ -92,7 +92,7 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
 
     # Try with 1/2 control plane nodes
     units = [master_node, other_node]
-    cluster = setup_microk8s_cluster(1, units)
+    cluster = setup_cluster(1, units)
 
     _join.assert_called_once_with(master_node, other_node, as_worker=True)
     assert cluster.master == master_node
@@ -101,7 +101,7 @@ def test_setup_microk8s_node_correct_number_of_worker_nodes(_join):
 
     # Try now with 2/3 control planes nodes
     units = [master_node, other_node, third_node]
-    cluster = setup_microk8s_cluster(2, units)
+    cluster = setup_cluster(2, units)
 
     _join.assert_has_calls(
         [call(master_node, other_node), call(master_node, third_node, as_worker=True)]
