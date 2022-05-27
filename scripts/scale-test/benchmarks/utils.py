@@ -2,6 +2,30 @@ import logging
 import time
 
 
+def pp_time(elapsed: int) -> str:
+    """
+    Pretty-print elapsed time
+
+    >>> pp_time(60*60 + 30*60 + 25)
+    '1h30m25s'
+    """
+    days = elapsed // 86400
+    hours = elapsed // 3600 % 24
+    minutes = elapsed // 60 % 60
+    seconds = elapsed % 60
+    final = ""
+    for unit, unit_name in [
+        (days, "d"),
+        (hours, "h"),
+        (minutes, "m"),
+        (seconds, "s"),
+    ]:
+        if unit <= 0:
+            continue
+        final += f"{unit}{unit_name}"
+    return final
+
+
 class timeit:
     def __init__(self, func):
         self.func = func
@@ -13,10 +37,10 @@ class timeit:
             logging.debug(f"{func_name} started")
             result = self.func(*args, **kwargs)
         except Exception:
-            logging.debug(
-                f"{func_name} errored after {int(time.time()-start)} seconds."
-            )
+            elapsed = int(time.time() - start)
+            logging.debug(f"{func_name} errored after {pp_time(elapsed)}.")
             raise
         else:
-            logging.debug(f"{func_name} took {int(time.time()-start)} seconds.")
+            elapsed = int(time.time() - start)
+            logging.debug(f"{func_name} took {pp_time(elapsed)}.")
             return result

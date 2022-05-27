@@ -8,14 +8,14 @@ JUJU_WAIT = "/snap/bin/juju-wait"
 def _juju(*args):
     cmd = [JUJU]
     cmd.extend(args)
-    logging.debug(f"subprocess.run {cmd}")
+    logging.debug(f"subprocess.run {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True)
 
 
 def _juju_wait(*args):
     cmd = [JUJU_WAIT]
     cmd.extend(args)
-    logging.debug(f"subprocess.run {cmd}")
+    logging.debug(f"subprocess.run {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True)
 
 

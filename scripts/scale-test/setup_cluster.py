@@ -13,7 +13,9 @@ APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
 
 
-logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
+LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
+LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, datefmt=LOG_DATEFMT)
 
 
 @timeit
@@ -242,11 +244,14 @@ def main():
         )
         cluster = setup_cluster(args.control_plane, units)
         save_cluster_info(cluster)
+    except KeyboardInterrupt:
+        logging.info("CTRL+C catched! exiting...")
     except Exception:
         logging.exception("Unexpected error")
+        raise
+    finally:
         if args.destroy_on_error:
             destroy_model(args.model)
-        raise
 
 
 if __name__ == "__main__":
