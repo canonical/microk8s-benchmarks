@@ -1,5 +1,4 @@
 # Scale testing
-
 The aim of the scale testing benchmark is to establish a way to test, measure and validate the improvements implemented on microk8s.
 
 Moreover this evaluation at scale can be used to communicate the exact performance achieved to customers and interested partners.
@@ -7,7 +6,6 @@ Moreover this evaluation at scale can be used to communicate the exact performan
 ## Running the benchmark
 
 ### 1. vSphere setup
-
 Currently, we are running it in vSphere/Boston cluster. You will need credentials to access it. Simply run:
 
 ```bash
@@ -23,8 +21,7 @@ VS_USER="foo" VS_PASS="bar" VS_CONTROLLER="mycontroller" ./scripts/setup-vsphere
 ```
 
 ### 2. Microk8s cluster
-
-Once the vSphere controller has been setup, you can use the `setup_cluster.py` script to create a Microk8s cluster on a new juju model. By default, it will create a single-node cluster on the `microk8s` namespace. However:
+Once a juju controller has been setup, you can use the `setup_cluster.py` script to create a Microk8s cluster on a new juju model. By default, it will create a single-node cluster on the `microk8s` namespace. However:
 
 ```bash
 python scripts/scale-test/setup_cluster.py -m "mycluster" --nodes 10 --control-plane 3
@@ -33,3 +30,29 @@ python scripts/scale-test/setup_cluster.py -m "mycluster" --nodes 10 --control-p
 will create a new juju model named `mycluster`, spin up 10 ubuntu instances on it and install `microk8s`. After that, it will join nodes as workers or not depending on the number of control-plane nodes were specified.
 
 Check out `python setup_cluster.py -h` for more detailed instructions on how to use the tool.
+
+#### Docker credentials
+If you are trying to setup a large cluster, you will most probably hit dockerhub rate-limit errors (see [this documentation page](https://microk8s.io/docs/dockerhub-limits)).
+
+To workaround this, you can specify the docker login credentials with
+
+```bash
+python setup_cluter.py --docker-username foo --docker-password bar
+```
+
+or with env variables
+
+```bash
+export DOCKER_USERNAME="foo"
+export DOCKER_PASSWORD="bar"
+python setup_cluter.py
+```
+
+and containerd on all nodes will be configured accordingly.
+
+#### HTTP proxy settings
+If you are running this script on a network-restricted environment (like vSphere cluster), you may need to specify the http proxy to configure the nodes. You can do so with the `--http-proxy` argument:
+
+```bash
+python setup_cluster.py --http-proxy http://squid.internal:3128
+```
