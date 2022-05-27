@@ -57,22 +57,26 @@ def install_snap(channel: str):
 @timeit
 def configure_http_proxy(units: List[Unit], http_proxy: str):
     logging.info("Configuring proxy settings on units")
-    for cmd in [
-        f"echo HTTPS_PROXY={http_proxy} >> /etc/environment",
-        f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
-        f"echo https_proxy={http_proxy} >> /etc/environment",
-        f"echo http_proxy={http_proxy} >> /etc/environment",
-    ]:
-        juju.run(cmd, app=APP_NAME).check_returncode()
+    proxy_command = ";".join(
+        [
+            f"echo HTTPS_PROXY={http_proxy} >> /etc/environment",
+            f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
+            f"echo https_proxy={http_proxy} >> /etc/environment",
+            f"echo http_proxy={http_proxy} >> /etc/environment",
+        ]
+    )
+    juju.run(proxy_command, app=APP_NAME).check_returncode()
 
     # NO_PROXY settings is unit-specific
     for unit in units:
         NO_PROXY = f"10.1.0.0/16,10.152.183.0/24,127.0.0.1,{unit.ip},{unit.instance_id},10.246.154.0/24"
-        for cmd in [
-            f"echo no_proxy={NO_PROXY} >> /etc/environment",
-            f"echo NO_PROXY={NO_PROXY} >> /etc/environment",
-        ]:
-            juju.run(cmd, unit=unit.name).check_returncode()
+        no_proxy_command = ";".join(
+            [
+                f"echo no_proxy={NO_PROXY} >> /etc/environment",
+                f"echo NO_PROXY={NO_PROXY} >> /etc/environment",
+            ]
+        )
+        juju.run(no_proxy_command, unit=unit.name).check_returncode()
 
 
 def reboot_and_wait(model):
