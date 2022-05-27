@@ -42,17 +42,16 @@ def update_etc_hosts(units: List[Unit]):
 @timeit
 def install_snap(channel: str):
     logging.info("Installing microk8s on all units")
-    for cmd, check_returncode in [
-        (f"snap install microk8s --classic --channel={channel}", True),
-        ("sudo usermod -a -G microk8s ubuntu", True),
-        ("sudo chown -f -R ubuntu ~/.kube", False),
-        ("sudo newgrp microk8s", True),
-        ("microk8s start", True),
-        ("microk8s status --wait-ready", True),
-    ]:
-        resp = juju.run(cmd, app=APP_NAME)
-        if check_returncode:
-            resp.check_returncode()
+    status_timeout = 60 * 20  # 20 min
+    all_commands = [
+        f"snap install microk8s --classic --channel={channel}",
+        "sudo usermod -a -G microk8s ubuntu",
+        "sudo chown -f -R ubuntu ~/.kube",
+        "sudo newgrp microk8s",
+        f"microk8s status --wait-ready --timeout={status_timeout}",
+    ]
+    command = ";".join(all_commands)
+    juju.run(command, app=APP_NAME).check_returncode()
 
 
 @timeit
