@@ -98,7 +98,7 @@ def configure_http_proxy(units: List[Unit], http_proxy: str):
 
     # NO_PROXY settings is unit-specific
     for unit in units:
-        NO_PROXY = f"10.1.0.0/16,10.152.183.0/24,127.0.0.1,{unit.ip},{unit.instance_id},10.246.154.0/24"
+        NO_PROXY=f"10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,{unit.instance_id}"
         no_proxy_command = ";".join(
             [
                 f"echo no_proxy={NO_PROXY} >> /etc/environment",
