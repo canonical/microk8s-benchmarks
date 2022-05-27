@@ -34,9 +34,8 @@ def update_etc_hosts(units: List[Unit]):
     the add-node/join process to work.
     """
     logging.info("Adding units hostnames on /etc/hosts")
-    for u in units:
-        cmd = f"echo {u.ip}\t{u.instance_id} >> /etc/hosts"
-        juju.run(cmd, app=APP_NAME).check_returncode()
+    command = ";".join([f"echo {u.ip}\t{u.instance_id} >> /etc/hosts" for u in units])
+    juju.run(command, app=APP_NAME).check_returncode()
 
 
 @timeit
