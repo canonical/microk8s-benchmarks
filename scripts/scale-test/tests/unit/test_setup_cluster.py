@@ -148,7 +148,7 @@ def test_get_join_cluster_url(_juju_run):
 @patch("setup_cluster.install_snap")
 @patch("setup_cluster.reboot_and_wait")
 @patch("setup_cluster.configure_http_proxy")
-def install_microk8s_configures_http_proxy_only_if_provided(
+def test_install_microk8s_configures_http_proxy_only_if_provided(
     _configure_http_proxy, _reboot_and_wait, _install_snap, update_etc_hosts
 ):
     units = []
@@ -157,7 +157,7 @@ def install_microk8s_configures_http_proxy_only_if_provided(
     _configure_http_proxy.assert_not_called()
 
     install_microk8s(Mock(), units, http_proxy=http_proxy)
-    _configure_http_proxy.assert_called_once_with(units)
+    _configure_http_proxy.assert_called_once_with(http_proxy)
 
 
 def test_get_docker_credentials():

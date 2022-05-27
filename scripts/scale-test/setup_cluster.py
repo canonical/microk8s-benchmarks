@@ -28,7 +28,7 @@ def install_microk8s(
     creds: Optional[DockerCredentials] = None,
 ):
     if http_proxy:
-        configure_http_proxy(units, http_proxy)
+        configure_http_proxy(http_proxy)
 
     reboot_and_wait(model)
     install_snap(channel)
@@ -84,28 +84,21 @@ def install_snap(channel: str):
 
 
 @timeit
-def configure_http_proxy(units: List[Unit], http_proxy: str):
+def configure_http_proxy(http_proxy: str):
     logging.info("Configuring proxy settings on units")
-    proxy_command = ";".join(
+    commands = ";".join(
         [
             f"echo HTTPS_PROXY={http_proxy} >> /etc/environment",
             f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
             f"echo https_proxy={http_proxy} >> /etc/environment",
             f"echo http_proxy={http_proxy} >> /etc/environment",
+            "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
+            'noproxy="10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,${juju_instance_id}"',
+            "echo no_proxy=${noproxy} >> /etc/environment",
+            "echo NO_PROXY=${noproxy} >> /etc/environment",
         ]
     )
-    juju.run(proxy_command, app=APP_NAME).check_returncode()
-
-    # NO_PROXY settings is unit-specific
-    for unit in units:
-        NO_PROXY=f"10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,{unit.instance_id}"
-        no_proxy_command = ";".join(
-            [
-                f"echo no_proxy={NO_PROXY} >> /etc/environment",
-                f"echo NO_PROXY={NO_PROXY} >> /etc/environment",
-            ]
-        )
-        juju.run(no_proxy_command, unit=unit.name).check_returncode()
+    juju.run(commands, app=APP_NAME).check_returncode()
 
 
 def reboot_and_wait(model: str):
