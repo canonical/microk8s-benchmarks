@@ -21,11 +21,11 @@ logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, datefmt=LOG_DATEFMT)
 
 @timeit
 def install_microk8s(
-    model,
+    model: str,
     units: List[Unit],
-    channel=DEFAULT_CHANNEL,
-    http_proxy: str = None,
-    creds: DockerCredentials = None,
+    channel: str = DEFAULT_CHANNEL,
+    http_proxy: Optional[str] = None,
+    creds: Optional[DockerCredentials] = None,
 ):
     if http_proxy:
         configure_http_proxy(units, http_proxy)
@@ -36,7 +36,7 @@ def install_microk8s(
 
     if creds:
         configure_containerd(creds)
-        restart_nodes()
+        restart_microk8s_on_nodes()
 
 
 def configure_containerd(creds: DockerCredentials):
@@ -51,7 +51,7 @@ def configure_containerd(creds: DockerCredentials):
     juju.run(cmd, app=APP_NAME).check_returncode()
 
 
-def restart_nodes():
+def restart_microk8s_on_nodes():
     logging.info("Restarting microk8s")
     cmd = ";".join(["microk8s stop", "microk8s start"])
     juju.run(cmd, app=APP_NAME).check_returncode()
@@ -108,7 +108,7 @@ def configure_http_proxy(units: List[Unit], http_proxy: str):
         juju.run(no_proxy_command, unit=unit.name).check_returncode()
 
 
-def reboot_and_wait(model):
+def reboot_and_wait(model: str):
     """
     Reboots all units in the model and then waits for them to be up.
     """
@@ -120,7 +120,7 @@ def reboot_and_wait(model):
     juju.wait_for_model(model)
 
 
-def get_join_cluster_url(master) -> str:
+def get_join_cluster_url(master: Unit) -> str:
     """
     Executes the microk8s add-node command at the master node with a non-expiring fixed token.
     After that, any other node can join the cluster with the returned join url.
@@ -186,7 +186,7 @@ def get_units() -> List[Unit]:
 
 
 @timeit
-def deploy_units(model, n_units: int) -> List[Unit]:
+def deploy_units(model: str, n_units: int) -> List[Unit]:
     logging.info(f"Deploying {n_units} ubuntu charm units")
     juju.add_model(model).check_returncode()
     juju.deploy(
@@ -204,7 +204,7 @@ def deploy_units(model, n_units: int) -> List[Unit]:
 
 def get_docker_credentials(args: Namespace) -> Optional[DockerCredentials]:
     """
-    Get docker credentials from arguments or environment variables (in this order)
+    Get docker credentials from arguments or environment variables (in this order).
     """
     if args.docker_username and args.docker_password:
         return DockerCredentials(
