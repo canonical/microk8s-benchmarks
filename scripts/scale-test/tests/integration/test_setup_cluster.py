@@ -10,18 +10,18 @@ TEST_JUJU_STATUS_OUTPUT = b"""{"model":{"name":"microk8s","type":"iaas","control
 
 
 @pytest.fixture()
-def subprocess_run_mock():
-    with patch.object(subprocess, "run") as _run:
-        yield _run
-
-
-@pytest.fixture()
 def juju_status_mock():
     with patch("setup_cluster.juju.status") as _status:
         _status().stdout = TEST_JUJU_STATUS_OUTPUT
         yield _status
 
 
+@pytest.fixture()
+def subprocess_run_mock():
+    with patch.object(subprocess, "run") as _run:
+        yield _run
+
+
 @patch.object(sys, "argv", ["setup_cluster", "--http-proxy", "http://myproxy"])
-def test_setup_cluster(subprocess_run_mock, juju_status_mock):
+def test_setup_cluster(juju_status_mock, subprocess_run_mock):
     main()

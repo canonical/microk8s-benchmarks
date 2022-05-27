@@ -26,3 +26,10 @@ def test_run(_juju):
     # all units
     run(command, app="myapp")
     _juju.assert_called_once_with("run", "-a", "myapp", "--", command)
+    _juju.reset_mock()
+
+    # with timeout
+    run(command, app="myapp", timeout="10s")
+    _juju.assert_called_once_with(
+        "run", "--timeout", "10s", "-a", "myapp", "--", command
+    )

@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import subprocess
 from argparse import ArgumentParser, Namespace
 from typing import List, Optional
 
@@ -106,8 +105,7 @@ def reboot_and_wait(model: str):
     Reboots all units in the model and then waits for them to be up.
     """
     logging.info("Rebooting all units")
-    cmd = f"timeout 10 juju run -a {APP_NAME} -- reboot".split()
-    subprocess.run(cmd)
+    juju.run("reboot", app=APP_NAME, timeout="10s")
 
     logging.info(f"Waiting for {model} model...")
     juju.wait_for_model(model)
