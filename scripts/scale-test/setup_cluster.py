@@ -1,12 +1,13 @@
 import json
 import logging
+import os
 import subprocess
 from argparse import ArgumentParser, Namespace
-from typing import List
+from typing import List, Optional
 
 from benchmarks import juju
 from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import Cluster, Unit
+from benchmarks.models import Cluster, DockerCredentials, Unit
 from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
@@ -20,13 +21,40 @@ logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, datefmt=LOG_DATEFMT)
 
 @timeit
 def install_microk8s(
-    model, units: List[Unit], channel=DEFAULT_CHANNEL, http_proxy: str = None
+    model,
+    units: List[Unit],
+    channel=DEFAULT_CHANNEL,
+    http_proxy: str = None,
+    creds: DockerCredentials = None,
 ):
-    if http_proxy is not None:
+    if http_proxy:
         configure_http_proxy(units, http_proxy)
+
     reboot_and_wait(model)
     install_snap(channel)
     update_etc_hosts(units)
+
+    if creds:
+        configure_containerd(creds)
+        restart_nodes()
+
+
+def configure_containerd(creds: DockerCredentials):
+    logging.info("Configuring containerd docker credentials")
+    containerd_file = "/var/snap/microk8s/current/args/containerd-template.toml"
+    lines = [
+        '[plugins.\\"io.containerd.grpc.v1.cri\\".registry.configs.\\"registry-1.docker.io\\".auth]',
+        f'username = \\"{creds.username}\\"',
+        f'password = \\"{creds.password}\\"',
+    ]
+    cmd = ";".join([f'echo "{line}" >> {containerd_file}' for line in lines])
+    juju.run(cmd, app=APP_NAME).check_returncode()
+
+
+def restart_nodes():
+    logging.info("Restarting microk8s")
+    cmd = ";".join(["microk8s stop", "microk8s start"])
+    juju.run(cmd, app=APP_NAME).check_returncode()
 
 
 def update_etc_hosts(units: List[Unit]):
@@ -174,6 +202,25 @@ def deploy_units(model, n_units: int) -> List[Unit]:
     return get_units()
 
 
+def get_docker_credentials(args: Namespace) -> Optional[DockerCredentials]:
+    """
+    Get docker credentials from arguments or environment variables (in this order)
+    """
+    if args.docker_username and args.docker_password:
+        return DockerCredentials(
+            username=args.docker_username,
+            password=args.docker_password,
+        )
+    elif os.environ.get("DOCKER_USERNAME") and os.environ.get("DOCKER_PASSWORD"):
+        logging.debug("docker credentials found from env vars")
+        return DockerCredentials(
+            username=os.environ["DOCKER_USERNAME"],
+            password=os.environ["DOCKER_PASSWORD"],
+        )
+    logging.debug("docker credentials not provided")
+    return None
+
+
 def parse_arguments() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument(
@@ -216,6 +263,16 @@ def parse_arguments() -> Namespace:
         default=False,
     )
     parser.add_argument("--debug", action="store_true", help="Increase log verbosity")
+    parser.add_argument(
+        "--docker-username",
+        type=str,
+        help="Docker username to configure containerd with",
+    )
+    parser.add_argument(
+        "--docker-password",
+        type=str,
+        help="Docker password to configure containerd with",
+    )
     args = parser.parse_args()
     if args.control_plane > args.nodes:
         raise ValueError("--nodes >= --control-plane")
@@ -240,7 +297,11 @@ def main():
     try:
         units = deploy_units(args.model, args.nodes)
         install_microk8s(
-            args.model, units, channel=args.channel, http_proxy=args.http_proxy
+            args.model,
+            units,
+            channel=args.channel,
+            http_proxy=args.http_proxy,
+            creds=get_docker_credentials(args),
         )
         cluster = setup_cluster(args.control_plane, units)
         save_cluster_info(cluster)

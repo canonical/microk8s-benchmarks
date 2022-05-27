@@ -1,13 +1,15 @@
 import json
+import os
 import sys
 from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
 
 from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import Cluster, Unit
+from benchmarks.models import Cluster, DockerCredentials, Unit
 from setup_cluster import (
     deploy_units,
+    get_docker_credentials,
     get_join_cluster_url,
     get_units,
     install_microk8s,
@@ -156,3 +158,23 @@ def install_microk8s_configures_http_proxy_only_if_provided(
 
     install_microk8s(Mock(), units, http_proxy=http_proxy)
     _configure_http_proxy.assert_called_once_with(units)
+
+
+def test_get_docker_credentials():
+    not_in_args = Mock(docker_username=None, docker_password=None)
+
+    assert get_docker_credentials(not_in_args) is None
+
+    in_args = Mock(docker_username="foo", docker_password="bar")
+    os.environ["DOCKER_USERNAME"] = "baz"
+    os.environ["DOCKER_PASSWORD"] = "hello"
+
+    # Args preceed
+    assert get_docker_credentials(in_args) == DockerCredentials(
+        username="foo", password="bar"
+    )
+
+    # Default to env vars
+    assert get_docker_credentials(not_in_args) == DockerCredentials(
+        username="baz", password="hello"
+    )

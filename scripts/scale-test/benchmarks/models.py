@@ -24,3 +24,9 @@ class Cluster:
             "workers": [u.to_dict() for u in self.workers],
             "control_plane": [u.to_dict() for u in self.control_plane],
         }
+
+
+@dataclass
+class DockerCredentials:
+    username: str
+    password: str
