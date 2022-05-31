@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 
 @dataclass
@@ -13,7 +13,7 @@ class Unit:
 
 
 @dataclass
-class Cluster:
+class ClusterInfo:
     master: Unit
     workers: List[Unit]
     control_plane: List[Unit]
@@ -24,6 +24,14 @@ class Cluster:
             "workers": [u.to_dict() for u in self.workers],
             "control_plane": [u.to_dict() for u in self.control_plane],
         }
+
+    @classmethod
+    def from_json(klass, data: Dict[str, str]) -> "ClusterInfo":
+        return klass(
+            master=Unit(**data["master"]),
+            control_plane=[Unit(**cp) for cp in data["control_plane"]],
+            workers=[Unit(**worker) for worker in data["workers"]],
+        )
 
 
 @dataclass
