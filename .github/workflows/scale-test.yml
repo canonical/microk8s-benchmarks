@@ -1,0 +1,50 @@
+name: Scale Test CI checks
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/scale-test/**'
+  pull_request:
+    paths:
+      - 'scripts/scale-test/**'
+jobs:
+  check-formatting:
+    name: Check Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install tox --fix-missing
+      - name: Check Python formatting
+        run: |
+          tox -c scripts/scale-test/tox.ini -e lint
+  check-unit-tests:
+    name: Check Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install tox --fix-missing
+      - name: Check unit tests
+        run: |
+          tox -c scripts/scale-test/tox.ini -e unit
+  check-integration-tests:
+    name: Check Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install tox --fix-missing
+      - name: Check integration tests
+        run: |
+          tox -c scripts/scale-test/tox.ini -e integration
