@@ -144,20 +144,30 @@ def test_get_join_cluster_url(_juju_run):
     )
 
 
+@patch("setup_cluster.wait_microk8s_ready")
 @patch("setup_cluster.update_etc_hosts")
 @patch("setup_cluster.install_snap")
-@patch("setup_cluster.reboot_and_wait")
-@patch("setup_cluster.configure_http_proxy")
-def test_install_microk8s_configures_http_proxy_only_if_provided(
-    _configure_http_proxy, _reboot_and_wait, _install_snap, update_etc_hosts
+@patch("setup_cluster.restart_containerd")
+@patch("setup_cluster.configure_containerd")
+def test_install_microk8s_configures_containerd_only_if_proxy_or_creds_provided(
+    _configure_containerd,
+    _restart_containerd,
+    _install_snap,
+    update_etc_hosts,
+    _wait_microk8s_ready,
 ):
     units = []
     http_proxy = "http://myproxy"
+    creds = DockerCredentials(username="foo", password="bar")
     install_microk8s(Mock(), units)
-    _configure_http_proxy.assert_not_called()
+    _configure_containerd.assert_not_called()
 
     install_microk8s(Mock(), units, http_proxy=http_proxy)
-    _configure_http_proxy.assert_called_once_with(http_proxy)
+    _configure_containerd.assert_called_once_with(None, http_proxy)
+    _configure_containerd.reset_mock()
+
+    install_microk8s(Mock(), units, creds=creds)
+    _configure_containerd.assert_called_once_with(creds, None)
 
 
 def test_get_docker_credentials():
