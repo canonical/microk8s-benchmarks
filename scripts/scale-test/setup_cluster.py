@@ -32,7 +32,6 @@ def install_microk8s(
 
     if creds or http_proxy:
         configure_containerd(creds, http_proxy)
-        restart_containerd()
 
     wait_microk8s_ready()
 
@@ -50,10 +49,14 @@ def configure_containerd(
     specified and http_proxy not set - rate limits are not a problem
     behind a http proxy.
     """
+    if not creds and not http_proxy:
+        # Nothing to do
+        return
     if http_proxy:
         _configure_containerd_proxy(http_proxy)
     elif creds:
         _configure_containerd_credentials(creds)
+    restart_containerd()
 
 
 def _configure_containerd_proxy(http_proxy: str):
