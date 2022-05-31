@@ -86,12 +86,6 @@ def _configure_containerd_credentials(creds: DockerCredentials):
     juju.run(cmd, app=APP_NAME).check_returncode()
 
 
-def restart_microk8s_on_nodes():
-    logging.info("Restarting microk8s")
-    cmd = ";".join(["microk8s stop", "microk8s start"])
-    juju.run(cmd, app=APP_NAME).check_returncode()
-
-
 def update_etc_hosts(units: List[Unit]):
     """
     Add entries in /etc/hosts of all units for each node in the cluster.
@@ -120,17 +114,6 @@ def install_snap(channel: str):
 def wait_microk8s_ready(timeout_min: int = 10):
     cmd = f"microk8s status --wait-ready --timeout {timeout_min * 60}"
     juju.run(cmd, app=APP_NAME).check_returncode()
-
-
-def reboot_and_wait(model: str):
-    """
-    Reboots all units in the model and then waits for them to be up.
-    """
-    logging.info("Rebooting all units")
-    juju.run("reboot", app=APP_NAME, timeout="10s")
-
-    logging.info(f"Waiting for {model} model...")
-    juju.wait_for_model(model)
 
 
 def get_join_cluster_url(master: Unit) -> str:
