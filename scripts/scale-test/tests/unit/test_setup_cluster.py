@@ -142,7 +142,7 @@ def test_get_join_cluster_url(_juju_run):
     assert join_url == f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
     _juju_run.assert_called_once_with(
         f"microk8s add-node --token {DEFAULT_ADD_NODE_TOKEN} --token-ttl {DEFAULT_ADD_NODE_TOKEN_TTL}",
-        units=[master.name],
+        unit=master.name,
     )
 
 

@@ -16,10 +16,16 @@ def test_run(_juju):
         run(command)
 
     with pytest.raises(ValueError):
+        run(command, unit="foo", app="bar")
+
+    with pytest.raises(ValueError):
         run(command, units=["foo"], app="bar")
 
+    with pytest.raises(ValueError):
+        run(command, units=["foo"], unit="bar")
+
     # a specific unit
-    run(command, units=["foo"])
+    run(command, unit="foo")
     _juju.assert_called_once_with("run", "-u", "foo", "--", command)
     _juju.reset_mock()
 

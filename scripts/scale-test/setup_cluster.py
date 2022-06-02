@@ -122,7 +122,7 @@ def get_join_cluster_url(master: Unit) -> str:
     After that, any other node can join the cluster with the returned join url.
     """
     cmd = f"microk8s add-node --token {DEFAULT_ADD_NODE_TOKEN} --token-ttl {DEFAULT_ADD_NODE_TOKEN_TTL}"
-    juju.run(cmd, units=[master.name]).check_returncode()
+    juju.run(cmd, unit=master.name).check_returncode()
     return f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
 
 
