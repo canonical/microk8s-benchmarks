@@ -33,7 +33,7 @@ def run(
     Run a command on a juju unit or on all units of a particular application
     """
     args = [unit, units, app]
-    if len([arg for arg in args if arg != None]) != 1:
+    if len([arg for arg in args if arg]) != 1:
         raise ValueError("Need to specify either units, unit or an app")
 
     if unit:
