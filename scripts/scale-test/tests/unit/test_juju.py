@@ -29,12 +29,12 @@ def test_run(_juju):
     _juju.assert_called_once_with("run", "-u", "foo", "--", command)
     _juju.reset_mock()
 
-    # a few units
+    # two units
     run(command, units=["foo", "bar"])
-    _juju.assert_called_once_with("run", "-u", "foo", "bar", "--", command)
+    _juju.assert_called_once_with("run", "-u", "foo,bar", "--", command)
     _juju.reset_mock()
 
-    # all units
+    # all units in an application
     run(command, app="myapp")
     _juju.assert_called_once_with("run", "-a", "myapp", "--", command)
     _juju.reset_mock()

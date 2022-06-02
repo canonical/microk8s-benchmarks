@@ -44,7 +44,7 @@ def run(
     else:
         if unit:
             units = [unit]
-        juju_command.extend(["-u", *units, "--", *command])
+        juju_command.extend(["-u", ",".join(units), "--", *command])
     return _juju(*juju_command)
 
 
