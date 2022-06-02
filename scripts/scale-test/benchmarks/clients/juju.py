@@ -1,6 +1,6 @@
 import logging
 import subprocess
-from typing import Optional
+from typing import List, Optional
 
 from benchmarks.models import Unit
 
@@ -24,24 +24,23 @@ def _juju_wait(*args):
 
 def run(
     *command,
-    unit: Optional[Unit] = None,
+    units: Optional[List[Unit]] = None,
     app: Optional[str] = None,
     timeout: str = None,
 ):
     """
     Run a command on a juju unit or on all units of a particular application
     """
-    args = [unit, app]
+    args = [units, app]
     if all(args) or not any(args):
-        raise ValueError("Need to specify either a unit or an app")
+        raise ValueError("Need to specify either units or an app")
     juju_command = ["run"]
     if timeout:
         juju_command.extend(["--timeout", timeout])
     if app:
         juju_command.extend(["-a", app, "--", *command])
     else:
-        juju_command.extend(["-u", unit, "--", *command])
-
+        juju_command.extend(["-u", *units, "--", *command])
     return _juju(*juju_command)
 
 

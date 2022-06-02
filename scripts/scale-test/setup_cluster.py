@@ -122,17 +122,20 @@ def get_join_cluster_url(master: Unit) -> str:
     After that, any other node can join the cluster with the returned join url.
     """
     cmd = f"microk8s add-node --token {DEFAULT_ADD_NODE_TOKEN} --token-ttl {DEFAULT_ADD_NODE_TOKEN_TTL}"
-    juju.run(cmd, unit=master.name).check_returncode()
+    juju.run(cmd, units=[master.name]).check_returncode()
     return f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
 
 
 @timeit
-def join_node_to_cluster(node: Unit, join_url: str, as_worker: bool = False):
-    logging.info(f"Joining {node} to cluster")
+def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = False):
+    nodes = [node.name for node in nodes]
     join_command = f"microk8s join {join_url}"
     if as_worker:
         join_command += " --worker"
-    juju.run(join_command, unit=node.name).check_returncode()
+        logging.info(f"Joining worker nodes to cluster: {nodes}")
+    else:
+        logging.info(f"Joining control plane nodes to cluster: {nodes}")
+    juju.run(join_command, units=nodes).check_returncode()
 
 
 @timeit
@@ -151,12 +154,19 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
     join_url = get_join_cluster_url(master_node)
     for node in units:
         if control_plane > 0:
-            join_node_to_cluster(node, join_url)
-            control_plane -= 1
             cluster.control_plane.append(node)
+            control_plane -= 1
         else:
-            join_node_to_cluster(node, join_url, as_worker=True)
             cluster.workers.append(node)
+
+    # Join them all at once
+    cp_to_join = [node for node in cluster.control_plane if node != master_node]
+    if cp_to_join:
+        join_nodes_to_cluster(cp_to_join, join_url)
+
+    if cluster.workers:
+        join_nodes_to_cluster(cluster.workers, join_url, as_worker=True)
+
     return cluster
 
 
