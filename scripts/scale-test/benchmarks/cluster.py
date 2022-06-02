@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from benchmarks.clients import juju
+from benchmarks.clients import juju, kubectl
 from benchmarks.models import ClusterInfo, Unit
 
 
@@ -38,9 +38,13 @@ class Microk8sCluster:
     def run_in_master_node(self, command: str):
         return self.run_in_unit(self.get_master_node(), command)
 
-    def reset(self):
-        logging.info("Resetting microk8s cluster")
-        return self.run_in_master_node("microk8s reset")
+    def create_namespace(self, name: str):
+        logging.info(f"Creating {name} namespace")
+        return kubectl.create("ns", name)
+
+    def delete_namespace(self, name: str):
+        logging.info(f"Deleting {name} namespace")
+        return kubectl.delete("ns", name)
 
     def enable(self, addons: List[str]):
         addons = " ".join(addons)

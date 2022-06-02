@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 from typing import List, Optional
 
 from benchmarks.cluster import Microk8sCluster
@@ -26,15 +27,25 @@ class Benchmark:
 
     def start(self):
         logging.info(f"Started benchmark: {self.name}")
-        n_workloads = len(self.workloads)
+        for workload in self.workloads:
+            self.run_workload(workload)
 
-        for index, workload in enumerate(self.workloads):
-            workload.apply()
+    def run_workload(self, workload: Workload):
+        with self.tmp_namespace() as ns:
+            workload.apply(namespace=ns)
             workload.wait()
 
-            is_last_workload = index == n_workloads - 1
-            if n_workloads > 1 and not is_last_workload:
-                self.cluster.reset()
+    @contextmanager
+    def tmp_namespace(self):
+        """
+        We deploy workloads on a new temporary namespace to that it is easier to cleanup whatever was deployed.
+        """
+        namespace = self.name
+        self.cluster.create_namespace(namespace)
+
+        yield namespace
+
+        self.cluster.delete_namespace(namespace)
 
     def bootstrap(self):
         logging.info("Bootstrapping cluster")
@@ -43,7 +54,6 @@ class Benchmark:
 
     def teardown(self):
         logging.info("Cluster teardown")
-        self.cluster.reset()
         if len(self.required_addons) > 0:
             self.cluster.disable(self.required_addons)
 

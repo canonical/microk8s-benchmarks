@@ -28,11 +28,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def configure_logging(args: argparse.Namespace) -> None:
     if args.debug:
         logging.root.setLevel(logging.DEBUG)
 
+
+def main():
+    args = parse_args()
+    configure_logging(args)
     cluster = Microk8sCluster.from_file(Path(args.cluster_file))
     scaletest = Benchmark(
         "scale_testing",

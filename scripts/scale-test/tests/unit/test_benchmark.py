@@ -42,4 +42,26 @@ def test_cluster_is_reset_between_workloads():
 
     bmk.start()
 
-    cluster.reset.assert_called_once()
+    assert cluster.create_namespace.call_count == 2
+    assert cluster.delete_namespace.call_count == 2
+
+
+def test_tmp_namespace():
+    cluster = Mock()
+    bmk = Benchmark("foo", cluster)
+
+    with bmk.tmp_namespace() as namespace:
+        assert namespace == "foo"
+        cluster.create_namespace.assert_called_once_with("foo")
+        cluster.delete_namespace.assert_not_called()
+
+    cluster.delete_namespace.assert_called_once_with("foo")
+
+
+def test_workloads_are_applied_in_namespace():
+    cluster = Mock()
+    workload = Mock()
+    bmk = Benchmark("foo", cluster)
+    bmk.run_workload(workload)
+
+    workload.apply.assert_called_once_with(namespace="foo")

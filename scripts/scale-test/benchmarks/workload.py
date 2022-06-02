@@ -1,6 +1,7 @@
 import logging
 import time
 from pathlib import Path
+from typing import Optional
 
 from benchmarks.utils import pp_time
 
@@ -16,8 +17,8 @@ class Workload:
     def __str__(self) -> str:
         return f"Workload[{self.yaml}]"
 
-    def apply(self) -> None:
-        kubectl.apply(self.yaml)
+    def apply(self, namespace: Optional[str] = None) -> None:
+        kubectl.apply(self.yaml, namespace=namespace)
 
     def wait(self) -> None:
         start = time.time()
