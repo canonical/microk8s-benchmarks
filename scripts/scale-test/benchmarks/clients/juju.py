@@ -36,14 +36,15 @@ def run(
     if len([arg for arg in args if arg != None]) != 1:
         raise ValueError("Need to specify either units, unit or an app")
 
+    if unit:
+        units = [unit]
+
     juju_command = ["run"]
     if timeout:
         juju_command.extend(["--timeout", timeout])
     if app:
         juju_command.extend(["-a", app, "--", *command])
     else:
-        if unit:
-            units = [unit]
         juju_command.extend(["-u", ",".join(units), "--", *command])
     return _juju(*juju_command)
 
