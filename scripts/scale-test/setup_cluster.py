@@ -51,8 +51,9 @@ def configure_http_proxy(http_proxy: str):
             f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
             f"echo https_proxy={http_proxy} >> /etc/environment",
             f"echo http_proxy={http_proxy} >> /etc/environment",
+            "local_ip=$(hostname -I) | awk '{print $1}'",
             "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
-            'noproxy="10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,${juju_instance_id}"',
+            'noproxy="10.1.0.0/16,10.152.183.0/24,127.0.0.1,${local_ip},${juju_instance_id}"',
             "echo no_proxy=${noproxy} >> /etc/environment",
             "echo NO_PROXY=${noproxy} >> /etc/environment",
         ]
@@ -112,9 +113,9 @@ def install_snap(channel: str):
     logging.info("Installing microk8s on all units")
     all_commands = [
         f"snap install microk8s --classic --channel={channel}",
-        "sudo usermod -a -G microk8s ubuntu",
-        "sudo chown -f -R ubuntu ~/.kube",
-        "sudo newgrp microk8s",
+        "usermod -a -G microk8s ubuntu",
+        "chown -f -R ubuntu ~/.kube",
+        "newgrp microk8s",
     ]
     command = ";".join(all_commands)
     juju.run(command, app=APP_NAME).check_returncode()
