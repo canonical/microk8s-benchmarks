@@ -40,7 +40,7 @@ def main():
     scaletest = Benchmark(
         "scale_testing",
         cluster=cluster,
-        required_addons=["dns", "hostpath-storage"],  # , "prometheus"],
+        required_addons=["dns", "hostpath-storage", "prometheus"],
     )
     scaletest.register_workloads(
         [
