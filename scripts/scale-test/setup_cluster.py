@@ -23,18 +23,52 @@ logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, datefmt=LOG_DATEFMT)
 
 @timeit
 def install_microk8s(
+    model: str,
     units: List[Unit],
     channel: str = DEFAULT_CHANNEL,
     http_proxy: Optional[str] = None,
     creds: Optional[DockerCredentials] = None,
 ):
+    if http_proxy:
+        configure_http_proxy(http_proxy)
+        reboot_and_wait(model)
+
     install_snap(channel)
     update_etc_hosts(units)
 
-    if creds or http_proxy:
-        configure_containerd(creds, http_proxy)
+    if creds:
+        configure_containerd(creds)
 
     wait_microk8s_ready()
+
+
+@timeit
+def configure_http_proxy(http_proxy: str):
+    logging.info("Configuring proxy settings on units")
+    commands = ";".join(
+        [
+            f"echo HTTPS_PROXY={http_proxy} >> /etc/environment",
+            f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
+            f"echo https_proxy={http_proxy} >> /etc/environment",
+            f"echo http_proxy={http_proxy} >> /etc/environment",
+            "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
+            'noproxy="10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,${juju_instance_id}"',
+            "echo no_proxy=${noproxy} >> /etc/environment",
+            "echo NO_PROXY=${noproxy} >> /etc/environment",
+        ]
+    )
+    juju.run(commands, app=APP_NAME).check_returncode()
+
+
+def reboot_and_wait(model: str):
+    """
+    Reboots all units in the model and then waits for them to be up.
+    """
+    logging.info("Rebooting all units")
+    juju.run("reboot", app=APP_NAME, timeout="10s")
+
+    logging.info(f"Waiting for {model} model...")
+    juju.wait_for_model(model)
 
 
 def restart_containerd():
@@ -42,40 +76,15 @@ def restart_containerd():
     juju.run(cmd, app=APP_NAME).check_returncode()
 
 
-def configure_containerd(
-    creds: Optional[DockerCredentials] = None, http_proxy: Optional[str] = None
-):
+def configure_containerd(creds: DockerCredentials):
     """
-    Configure http proxy if specified. Configure docker credentials if
-    specified and http_proxy not set - rate limits are not a problem
-    behind a http proxy.
+    Configure docker credentials if specified.
     """
-    if not creds and not http_proxy:
-        # Nothing to do
-        return
-    if http_proxy:
-        _configure_containerd_proxy(http_proxy)
-    elif creds:
-        _configure_containerd_credentials(creds)
+    configure_containerd_credentials(creds)
     restart_containerd()
 
 
-def _configure_containerd_proxy(http_proxy: str):
-    logging.info("Configuring containerd proxy settings")
-    containerd_env = "/var/snap/microk8s/current/args/containerd-env"
-    commands = ";".join(
-        [
-            f"echo HTTPS_PROXY={http_proxy} >> {containerd_env}",
-            f"echo HTTP_PROXY={http_proxy} >> {containerd_env}",
-            "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
-            'noproxy="10.0.0.0/8,127.0.0.0/8,192.168.0.0/16,${juju_instance_id}"',
-            f"echo NO_PROXY=${{noproxy}} >> {containerd_env}",
-        ]
-    )
-    juju.run(commands, app=APP_NAME).check_returncode()
-
-
-def _configure_containerd_credentials(creds: DockerCredentials):
+def configure_containerd_credentials(creds: DockerCredentials):
     logging.info("Configuring containerd docker credentials")
     containerd_file = "/var/snap/microk8s/current/args/containerd-template.toml"
     lines = [
@@ -293,6 +302,7 @@ def main():
     try:
         units = deploy_units(args.model, args.nodes)
         install_microk8s(
+            args.model,
             units,
             channel=args.channel,
             http_proxy=args.http_proxy,
