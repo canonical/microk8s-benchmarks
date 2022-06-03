@@ -6,7 +6,7 @@ from unittest.mock import Mock, call, mock_open, patch
 import pytest
 
 from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import Cluster, DockerCredentials, Unit
+from benchmarks.models import ClusterInfo, DockerCredentials, Unit
 from setup_cluster import (
     deploy_units,
     get_docker_credentials,
@@ -69,7 +69,7 @@ def test_get_units(_juju_status):
 def test_save_cluster_info():
     with patch("setup_cluster.open", mock_open()) as _open:
         unit = Unit(name="foo", ip="bar", instance_id="ba")
-        cluster = Cluster(master=unit, control_plane=[unit], workers=[])
+        cluster = ClusterInfo(master=unit, control_plane=[unit], workers=[])
 
         save_cluster_info(cluster)
 

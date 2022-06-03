@@ -4,11 +4,12 @@ import json
 import logging
 import os
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import List, Optional
 
 from benchmarks.clients import juju
 from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import Cluster, DockerCredentials, Unit
+from benchmarks.models import ClusterInfo, DockerCredentials, Unit
 from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
@@ -136,14 +137,14 @@ def join_node_to_cluster(node: Unit, join_url: str, as_worker: bool = False):
 
 
 @timeit
-def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
+def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
     n_workers = len(units) - control_plane
     logging.info(
         f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
     )
     master_node = units.pop(0)
     control_plane -= 1  # master is running control plane already
-    cluster = Cluster(master=master_node, control_plane=[master_node], workers=[])
+    cluster = ClusterInfo(master=master_node, control_plane=[master_node], workers=[])
     if len(units) == 0:
         # Single-node cluster. No nodes to join
         return cluster
@@ -160,8 +161,7 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
     return cluster
 
 
-def save_cluster_info(cluster: Cluster):
-    path = "cluster.json"
+def save_cluster_info(cluster: ClusterInfo, path: Path = "cluster.json"):
     logging.info(f"Saving cluster info to {path}")
     with open(path, "w") as f:
         f.write(json.dumps(cluster.to_dict()))
@@ -299,7 +299,7 @@ def main():
             creds=get_docker_credentials(args),
         )
         cluster = setup_cluster(args.control_plane, units)
-        save_cluster_info(cluster)
+        save_cluster_info(cluster, path=Path(f"{args.model}_cluster.json"))
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
     except Exception:
