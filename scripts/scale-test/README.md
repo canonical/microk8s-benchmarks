@@ -27,9 +27,9 @@ Once a juju controller has been setup, you can use the `setup_cluster.py` script
 python scripts/scale-test/setup_cluster.py -m "mycluster" --nodes 10 --control-plane 3
 ```
 
-will create a new juju model named `mycluster`, spin up 10 ubuntu instances on it and install `microk8s`. After that, it will join nodes as workers or not depending on the number of control-plane nodes were specified.
+will create a new juju model named `mycluster`, spin up 10 ubuntu instances on it and install `microk8s`. After that, it will join nodes as workers or not depending on the number of control-plane nodes were specified. You can also specify which channel you want to install by using the `--channel` argument.
 
-Check out `python setup_cluster.py -h` for more detailed instructions on how to use the tool.
+Check out `python setup_cluster.py --help` for more detailed instructions on how to use the tool.
 
 #### Docker credentials
 If you are trying to setup a large cluster, you will most probably hit dockerhub rate-limit errors (see [this documentation page](https://microk8s.io/docs/dockerhub-limits)).
