@@ -38,20 +38,25 @@ class Microk8sCluster:
     def run_in_master_node(self, command: str):
         return self.run_in_unit(self.get_master_node(), command)
 
-    def create_namespace(self, name: str):
+    def create_namespace(self, name: str) -> None:
         logging.info(f"Creating {name} namespace")
-        return kubectl.create("ns", name)
+        kubectl.create("ns", name)
 
-    def delete_namespace(self, name: str):
+    def delete_namespace(self, name: str) -> None:
         logging.info(f"Deleting {name} namespace")
-        return kubectl.delete("ns", name)
+        kubectl.delete("ns", name)
 
-    def enable(self, addons: List[str]):
+    def enable(self, addons: List[str]) -> None:
         addons = " ".join(addons)
         logging.info(f"Enabling addons: {addons}")
-        return self.run_in_master_node(f"microk8s enable {addons}")
+        self.run_in_master_node(f"microk8s enable {addons}")
 
-    def disable(self, addons: List[str]):
+    def disable(self, addons: List[str]) -> None:
         addons = " ".join(addons)
         logging.info(f"Disabling addon: {addons}")
-        return self.run_in_master_node(f"microk8s disable {addons}")
+        self.run_in_master_node(f"microk8s disable {addons}")
+
+    def fetch_kubeconfig(self) -> str:
+        logging.info("Fetching kubectl config from cluster")
+        resp = self.run_in_master_node("microk8s config")
+        return resp.stdout.decode()

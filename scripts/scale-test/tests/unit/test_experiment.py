@@ -1,12 +1,15 @@
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-from benchmarks.experiment import Experiment
+from benchmarks.experiment import Experiment, safe_kubeconfig
 
 
+@patch("benchmarks.experiment.safe_kubeconfig", autospec=True)
 @patch("benchmarks.experiment.Experiment.teardown")
-def test_run_calls_teardown_on_graceful_exit(_teardown):
+def test_run_calls_teardown_on_graceful_exit(_teardown, _safe_kubeconfig):
     exp = Experiment("foo", None)
 
     exp.run()
@@ -14,9 +17,10 @@ def test_run_calls_teardown_on_graceful_exit(_teardown):
     _teardown.assert_called_once()
 
 
+@patch("benchmarks.experiment.safe_kubeconfig", autospec=True)
 @patch("benchmarks.experiment.Experiment.teardown")
 @patch("benchmarks.experiment.Experiment.start")
-def test_run_calls_teardown_on_exception(_start, _teardown):
+def test_run_calls_teardown_on_exception(_start, _teardown, _safe_kubeconfig):
     exp = Experiment("foo", None)
 
     # Unhandled exception
@@ -65,3 +69,29 @@ def test_workloads_are_applied_in_namespace():
     exp.run_workload(workload)
 
     workload.apply.assert_called_once_with(namespace="foo")
+
+
+@pytest.fixture()
+def fake_kube_config():
+    config = "previous_config"
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp = tempfile.NamedTemporaryFile(dir=tmpdirname)
+        tmp.write(config.encode())
+        tmp.file.flush()
+        yield Path(tmp.name)
+
+        tmp.close()
+
+
+def test_safe_kubeconfig(fake_kube_config):
+    cluster = Mock(fetch_kubeconfig=Mock(return_value="new_config"))
+    with safe_kubeconfig(cluster, config=fake_kube_config):
+
+        # Check that cluster kube config was fetched
+        cluster.fetch_kubeconfig.assert_called_once()
+        with open(fake_kube_config, "r") as f:
+            assert f.read() == "new_config"
+
+    # Check previous config was recovered
+    with open(fake_kube_config, "r") as f:
+        assert f.read() == "previous_config"
