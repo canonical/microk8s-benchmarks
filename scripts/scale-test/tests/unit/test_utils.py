@@ -1,6 +1,6 @@
 import logging
 
-from benchmarks.utils import timeit
+from benchmarklib.utils import timeit
 
 
 def test_timeit_decorator(caplog):

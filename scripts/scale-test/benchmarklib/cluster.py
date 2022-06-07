@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from benchmarks.clients import juju, kubectl
-from benchmarks.models import ClusterInfo, Unit
+from benchmarklib.clients import juju, kubectl
+from benchmarklib.models import ClusterInfo, Unit
 
 
 class Microk8sCluster:
@@ -21,6 +21,10 @@ class Microk8sCluster:
         with open(cluster_file, mode="r") as f:
             info = ClusterInfo.from_json(json.loads(f.read()))
             return klass(info)
+
+    @property
+    def size(self) -> int:
+        return len(self.info.control_plane) + len(self.info.workers)
 
     def get_master_node(self) -> Unit:
         return self.info.master

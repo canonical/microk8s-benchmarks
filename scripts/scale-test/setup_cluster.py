@@ -8,10 +8,10 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List, Optional
 
-from benchmarks.clients import juju
-from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import ClusterInfo, DockerCredentials, Unit
-from benchmarks.utils import timeit
+from benchmarklib.clients import juju
+from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
+from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
+from benchmarklib.utils import timeit
 
 APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
@@ -52,7 +52,7 @@ def configure_http_proxy(http_proxy: str):
             f"echo HTTP_PROXY={http_proxy} >> /etc/environment",
             f"echo https_proxy={http_proxy} >> /etc/environment",
             f"echo http_proxy={http_proxy} >> /etc/environment",
-            "local_ip=$(hostname -I) | awk '{print $1}'",
+            "local_ip=$(hostname -I | awk '{print $1}')",
             "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
             'noproxy="10.0.0.0/8,127.0.0.1,${local_ip},${juju_instance_id}"',
             "echo no_proxy=${noproxy} >> /etc/environment",

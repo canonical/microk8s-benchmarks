@@ -2,9 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmarks.clients.juju import run
+from benchmarklib.clients.juju import run
 
-JUJU_MODULE = "benchmarks.clients.juju"
+JUJU_MODULE = "benchmarklib.clients.juju"
 
 
 @patch(f"{JUJU_MODULE}._juju")

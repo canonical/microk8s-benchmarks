@@ -2,12 +2,18 @@ import logging
 import os
 import shutil
 from contextlib import ContextDecorator, contextmanager
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from benchmarks.cluster import Microk8sCluster
-from benchmarks.workload import Workload
+from benchmarklib.cluster import Microk8sCluster
+from benchmarklib.metrics.base import ConstantField, Metric
+from benchmarklib.metrics.collector import MetricsCollector
+from benchmarklib.workload import Workload
+
+CURRENT_PATH = Path.cwd()
+DATA_LAKE_PATH = CURRENT_PATH.parent.parent / "data"
 
 
 class Experiment:
@@ -25,22 +31,58 @@ class Experiment:
         self.required_addons = required_addons or []
         self.cluster = cluster
         self.workloads: List[Workload] = []
+        self.all_workloads_metrics: List[Metric] = []
+        self.workload_metrics: Dict[Workload, List[Metric]] = {}
 
-    def register_workloads(self, workloads):
+    def register_workloads(self, workloads, metrics: Optional[List[Metric]] = None):
+        """
+        Register workload. Use metrics param to add specific metrics
+        that will only be collected during the execution of this workload.
+        """
+        if not isinstance(workloads, list):
+            workloads = [workloads]
+
         self.workloads.extend(workloads)
+        if metrics:
+            for workload in workloads:
+                self.workload_metrics.setdefault(workload, []).extend(metrics)
+
+    def register_metrics(self, metrics: List[Metric]):
+        """
+        These metrics will be collected for all workloads
+        """
+        self.all_workloads_metrics.extend(metrics)
 
     def start(self):
         logging.info(f"Started benchmark: {self.name}")
         for workload in self.workloads:
             self.run_workload(workload)
 
+    def get_metrics_for_workload(self, workload: Workload) -> List[Metric]:
+        return self.all_workloads_metrics + self.workload_metrics.get(workload, [])
+
+    @property
+    def store_metrics_at(self) -> Path:
+        return DATA_LAKE_PATH / self.name / self.run_id
+
+    @property
+    def run_id(self):
+        _id = datetime.today().strftime("%d-%m-%Y")
+        return f"run-{_id}"
+
     def run_workload(self, workload: Workload):
-        with self.tmp_namespace() as ns:
-            workload.apply(namespace=ns)
-            workload.wait()
+        with self.short_lived_namespace() as ns:
+            with WorkloadMetrics(
+                workload=workload,
+                metrics=self.get_metrics_for_workload(workload),
+                poll_period=10,
+                store_at=self.store_metrics_at,
+            ):
+                workload.apply(namespace=ns)
+                workload.wait()
 
     @contextmanager
-    def tmp_namespace(self):
+    def short_lived_namespace(self):
         """
         We deploy workloads on a new temporary namespace to that it is easier to cleanup whatever was deployed.
         """
@@ -71,6 +113,26 @@ class Experiment:
                 logging.info("Experiment cancelled! Tearing down cluster...")
             finally:
                 self.teardown()
+
+
+class WorkloadMetrics(MetricsCollector):
+    def __init__(
+        self,
+        workload: Workload,
+        metrics: List[Metric],
+        store_at: Path,
+        poll_period: int = 10,
+    ):
+        # Inject a field (new column in the metric csv file) to specify from which workload the metrics were collected.
+        self.workload = workload
+        for metric in metrics:
+            metric.add_field(ConstantField("workload", self.workload_id))
+
+        super().__init__(metrics=metrics, store_at=store_at, poll_period=poll_period)
+
+    @property
+    def workload_id(self):
+        return str(self.workload.yaml)
 
 
 class safe_kubeconfig(ContextDecorator):

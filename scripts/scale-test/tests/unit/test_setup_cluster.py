@@ -6,8 +6,8 @@ from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
 
-from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarks.models import ClusterInfo, DockerCredentials, Unit
+from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
+from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
 from setup_cluster import (
     all_nodes_joined,
     deploy_units,

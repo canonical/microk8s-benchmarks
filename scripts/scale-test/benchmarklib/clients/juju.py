@@ -2,7 +2,7 @@ import logging
 import subprocess
 from typing import List, Optional
 
-from benchmarks.models import Unit
+from benchmarklib.models import Unit
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"

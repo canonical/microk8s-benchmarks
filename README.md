@@ -1,5 +1,5 @@
 # microk8s-benchmarks
-Data and tooling around microk8s benchmarks.
+Data and tooling for microk8s benchmarks.
 
 The `data/` folder is the data lake where all the experiment's output is stored. The `reports/` folder is where the final reports should be stored. Finally, the `scripts/` holds all the scripts and tooling needed to run each benchmark.
 
