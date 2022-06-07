@@ -13,7 +13,7 @@ from setup_cluster import (
     get_join_cluster_url,
     get_units,
     install_microk8s,
-    join_node_to_cluster,
+    join_nodes_to_cluster,
     main,
     parse_arguments,
     save_cluster_info,
@@ -78,9 +78,9 @@ def test_save_cluster_info():
 
 
 @patch("setup_cluster.get_join_cluster_url")
-@patch("setup_cluster.join_node_to_cluster")
+@patch("setup_cluster.join_nodes_to_cluster")
 def test_setup_cluster_joins_correct_number_of_worker_nodes(
-    _join_node_to_cluster, _get_join_cluster_url
+    _join_nodes_to_cluster, _get_join_cluster_url
 ):
     master_node = Unit(name="master", ip="masterip", instance_id="masterid")
     other_node = Unit(name="node1", ip="node1ip", instance_id="node1id")
@@ -92,7 +92,9 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
 
     _get_join_cluster_url.assert_called_once_with(master_node)
     join_url = _get_join_cluster_url.return_value
-    _join_node_to_cluster.assert_called_once_with(other_node, join_url, as_worker=True)
+    _join_nodes_to_cluster.assert_called_once_with(
+        [other_node], join_url, as_worker=True
+    )
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node]
     assert cluster.workers == [other_node]
@@ -101,8 +103,8 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
     units = [master_node, other_node, third_node]
     cluster = setup_cluster(2, units)
 
-    _join_node_to_cluster.assert_has_calls(
-        [call(other_node, join_url), call(third_node, join_url, as_worker=True)]
+    _join_nodes_to_cluster.assert_has_calls(
+        [call([other_node], join_url), call([third_node], join_url, as_worker=True)]
     )
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node, other_node]
@@ -110,24 +112,24 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
 
 
 @patch("setup_cluster.juju")
-def test_join_node_to_cluster(_juju):
+def test_join_nodes_to_cluster(_juju):
     node = Mock()
     join_url = "joinme"
 
-    join_node_to_cluster(node, join_url)
+    join_nodes_to_cluster([node], join_url)
 
-    _juju.run.assert_called_once_with(f"microk8s join {join_url}", unit=node.name)
+    _juju.run.assert_called_once_with(f"microk8s join {join_url}", units=[node.name])
 
 
 @patch("setup_cluster.juju")
-def test_join_node_to_cluster_as_worker(_juju):
+def test_join_nodes_to_cluster_as_worker(_juju):
     node = Mock()
     join_url = "joinme"
 
-    join_node_to_cluster(node, join_url, as_worker=True)
+    join_nodes_to_cluster([node], join_url, as_worker=True)
 
     _juju.run.assert_called_once_with(
-        f"microk8s join {join_url} --worker", unit=node.name
+        f"microk8s join {join_url} --worker", units=[node.name]
     )
 
 

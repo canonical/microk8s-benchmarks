@@ -138,12 +138,15 @@ def get_join_cluster_url(master: Unit) -> str:
 
 
 @timeit
-def join_node_to_cluster(node: Unit, join_url: str, as_worker: bool = False):
-    logging.info(f"Joining {node} to cluster")
+def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = False):
+    nodes = [node.name for node in nodes]
     join_command = f"microk8s join {join_url}"
     if as_worker:
         join_command += " --worker"
-    juju.run(join_command, unit=node.name).check_returncode()
+        logging.info(f"Joining worker nodes to cluster: {nodes}")
+    else:
+        logging.info(f"Joining control plane nodes to cluster: {nodes}")
+    juju.run(join_command, units=nodes).check_returncode()
 
 
 @timeit
@@ -159,15 +162,15 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
         # Single-node cluster. No nodes to join
         return cluster
 
+    cp_units = units[:control_plane]
+    w_units = units[control_plane:]
     join_url = get_join_cluster_url(master_node)
-    for node in units:
-        if control_plane > 0:
-            join_node_to_cluster(node, join_url)
-            control_plane -= 1
-            cluster.control_plane.append(node)
-        else:
-            join_node_to_cluster(node, join_url, as_worker=True)
-            cluster.workers.append(node)
+    if cp_units:
+        join_nodes_to_cluster(cp_units, join_url)
+        cluster.control_plane.extend(cp_units)
+    if w_units:
+        join_nodes_to_cluster(w_units, join_url, as_worker=True)
+        cluster.workers.extend(w_units)
     return cluster
 
 
