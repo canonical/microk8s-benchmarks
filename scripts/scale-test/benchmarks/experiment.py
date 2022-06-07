@@ -110,6 +110,9 @@ class safe_kubeconfig(ContextDecorator):
             return
 
         tmpdir = NamedTemporaryFile(delete=False)
+        logging.debug(
+            f"Backing up existing kube config {self.config_file} --> {tmpdir.name}"
+        )
         shutil.move(self.config_file, tmpdir.name)
         return tmpdir
 
@@ -117,4 +120,7 @@ class safe_kubeconfig(ContextDecorator):
         """
         Recover a previously backed up kube config file to ~/.kube/config
         """
+        logging.debug(
+            f"Recovering kube config {backup_config.name} -> {self.config_file}"
+        )
         shutil.move(backup_config.name, self.config_file)
