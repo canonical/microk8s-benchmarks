@@ -6,7 +6,7 @@ from benchmarks.cluster import Microk8sCluster
 from benchmarks.workload import Workload
 
 
-class Benchmark:
+class Experiment:
     """
     Manages runtime of a benchmark experiment on top of a Microk8s cluster.
     """

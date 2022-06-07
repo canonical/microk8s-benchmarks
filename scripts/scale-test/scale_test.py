@@ -4,8 +4,8 @@ import argparse
 import logging
 from pathlib import Path
 
-from benchmarks.benchmark import Benchmark
 from benchmarks.cluster import Microk8sCluster
+from benchmarks.experiment import Experiment
 from benchmarks.workload import Workload
 
 MINUTE = 60
@@ -37,7 +37,7 @@ def main():
     args = parse_args()
     configure_logging(args)
     cluster = Microk8sCluster.from_file(Path(args.cluster_file))
-    scaletest = Benchmark(
+    scaletest = Experiment(
         "scale_testing",
         cluster=cluster,
         required_addons=["dns", "hostpath-storage", "prometheus"],
