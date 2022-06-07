@@ -20,9 +20,21 @@ def apply(yaml: Path, namespace: Optional[str] = None) -> None:
     return _kubectl(*command).check_returncode()
 
 
-def create(type: str, name: str):
-    return _kubectl("create", type, name)
+def create(type: str, name: str) -> None:
+    resp = _kubectl("create", type, name)
+    try:
+        resp.check_returncode()
+    except subprocess.CalledProcessError as err:
+        error = err.stderr.decode()
+        logging.error(f"Error creating {type} {name}: {error}")
+        raise
 
 
-def delete(type: str, name: str):
-    return _kubectl("delete", type, name)
+def delete(type: str, name: str) -> None:
+    resp = _kubectl("delete", type, name)
+    try:
+        resp.check_returncode()
+    except subprocess.CalledProcessError as err:
+        error = err.stderr.decode()
+        logging.error(f"Error deleting {type} {name}: {error}")
+        raise
