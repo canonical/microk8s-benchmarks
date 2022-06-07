@@ -151,22 +151,15 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> Cluster:
         # Single-node cluster. No nodes to join
         return cluster
 
+    cp_units = units[:control_plane]
+    w_units = units[control_plane:]
     join_url = get_join_cluster_url(master_node)
-    for node in units:
-        if control_plane > 0:
-            cluster.control_plane.append(node)
-            control_plane -= 1
-        else:
-            cluster.workers.append(node)
-
-    # Join them all at once
-    cp_to_join = [node for node in cluster.control_plane if node != master_node]
-    if cp_to_join:
-        join_nodes_to_cluster(cp_to_join, join_url)
-
-    if cluster.workers:
-        join_nodes_to_cluster(cluster.workers, join_url, as_worker=True)
-
+    if cp_units:
+        join_nodes_to_cluster(cp_units, join_url)
+        cluster.control_plane.extend(cp_units)
+    if w_units:
+        join_nodes_to_cluster(w_units, join_url, as_worker=True)
+        cluster.workers.extend(w_units)
     return cluster
 
 
