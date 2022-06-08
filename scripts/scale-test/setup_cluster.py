@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List, Optional
@@ -53,7 +54,7 @@ def configure_http_proxy(http_proxy: str):
             f"echo http_proxy={http_proxy} >> /etc/environment",
             "local_ip=$(hostname -I) | awk '{print $1}'",
             "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
-            'noproxy="10.1.0.0/16,10.152.183.0/24,127.0.0.1,${local_ip},${juju_instance_id}"',
+            'noproxy="10.0.0.0/8,127.0.0.1,${local_ip},${juju_instance_id}"',
             "echo no_proxy=${noproxy} >> /etc/environment",
             "echo NO_PROXY=${noproxy} >> /etc/environment",
         ]
@@ -146,7 +147,52 @@ def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = Fa
         logging.info(f"Joining worker nodes to cluster: {nodes}")
     else:
         logging.info(f"Joining control plane nodes to cluster: {nodes}")
-    juju.run(join_command, units=nodes).check_returncode()
+    resp = juju.run(join_command, units=nodes)
+    resp.check_returncode()
+    logging.debug(f"Join output: {resp.stdout.decode()[:1000]}")
+
+
+def wait_for_nodes_to_join(cluster: ClusterInfo):
+    logging.info("Waiting for nodes to join the cluster...")
+    max_checks = 30
+    check_period_s = 30
+    while max_checks < 0:
+        if all_nodes_joined(cluster):
+            break
+        time.sleep(check_period_s)
+
+
+def all_nodes_joined(cluster: ClusterInfo) -> bool:
+    command = "microk8s.kubectl get nodes -o json"
+    resp = juju.run(command, unit=cluster.master.name)
+    get_nodes = json.loads(resp.stdout.decode())
+    ready = []
+    not_ready = []
+
+    for item in get_nodes["items"]:
+
+        if item["kind"] != "Node":
+            continue
+
+        node_id = item["metadata"]["name"]
+        is_ready = False
+        for condition in item["status"]["conditions"]:
+            if (
+                condition["type"] == "Ready"  # noqa
+                and condition["status"] == "True"  # noqa
+                and condition["reason"] == "KubeletReady"  # noqa
+            ):
+                is_ready = True
+                break
+        if is_ready:
+            ready.append(node_id)
+        else:
+            not_ready.append(node_id)
+
+    all_ready = not_ready == []
+    if not all_ready:
+        logging.debug(f"Some nodes are not ready yet: {''.join(not_ready)}")
+    return all_ready
 
 
 @timeit
@@ -171,6 +217,8 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
     if w_units:
         join_nodes_to_cluster(w_units, join_url, as_worker=True)
         cluster.workers.extend(w_units)
+
+    wait_for_nodes_to_join(cluster)
     return cluster
 
 
