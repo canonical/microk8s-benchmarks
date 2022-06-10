@@ -15,7 +15,7 @@ from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
-
+MINUTE = 60
 
 LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -152,29 +152,42 @@ def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = Fa
     logging.debug(f"Join output: {resp.stdout.decode()[:1000]}")
 
 
-def wait_for_nodes_to_join(cluster: ClusterInfo):
+def wait_for_nodes_to_join(cluster: ClusterInfo, max_wait: int = 5 * MINUTE):
     logging.info("Waiting for nodes to join the cluster...")
-    max_checks = 30
-    check_period_s = 30
-    while max_checks < 0:
+    check_period = 30
+
+    start = time.time()
+    while True:
         if all_nodes_joined(cluster):
+            logging.info("All nodes have joined the cluster")
             break
-        time.sleep(check_period_s)
+
+        if (time.time() - start) > max_wait:
+            logging.warning("Some nodes haven't joined the cluster yet")
+            break
+
+        time.sleep(check_period)
 
 
 def all_nodes_joined(cluster: ClusterInfo) -> bool:
     command = "microk8s.kubectl get nodes -o json"
     resp = juju.run(command, unit=cluster.master.name)
+    resp.check_returncode()
+
+    cluster_ids = [node.instance_id for node in cluster.control_plane + cluster.workers]
+
     get_nodes = json.loads(resp.stdout.decode())
-    ready = []
+
     not_ready = []
-
     for item in get_nodes["items"]:
-
         if item["kind"] != "Node":
             continue
 
         node_id = item["metadata"]["name"]
+        if node_id not in cluster_ids:
+            logging.warning(f"Node not known to cluster {node_id}. Ignoring...")
+            continue
+
         is_ready = False
         for condition in item["status"]["conditions"]:
             if (
@@ -184,15 +197,15 @@ def all_nodes_joined(cluster: ClusterInfo) -> bool:
             ):
                 is_ready = True
                 break
-        if is_ready:
-            ready.append(node_id)
-        else:
+
+        if not is_ready:
             not_ready.append(node_id)
 
-    all_ready = not_ready == []
-    if not all_ready:
+    if not_ready != []:
         logging.debug(f"Some nodes are not ready yet: {''.join(not_ready)}")
-    return all_ready
+        return False
+
+    return True
 
 
 @timeit
@@ -218,7 +231,7 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
         join_nodes_to_cluster(w_units, join_url, as_worker=True)
         cluster.workers.extend(w_units)
 
-    wait_for_nodes_to_join(cluster)
+    wait_for_nodes_to_join(cluster, max_wait=10 * MINUTE)
     return cluster
 
 
