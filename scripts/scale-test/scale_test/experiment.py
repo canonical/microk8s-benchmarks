@@ -10,7 +10,7 @@ from benchmarklib.workload import Workload
 from scale_test.metrics import DqliteMemory
 
 MINUTE = 60
-WORKLOAD_TIME = 10 * MINUTE
+WORKLOAD_TIME = 5 * MINUTE
 
 LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -43,7 +43,7 @@ def main():
 
     # Experiment
     scaletest = Experiment(
-        "scale_testing",
+        "scale-test",
         cluster=cluster,
         required_addons=["dns", "hostpath-storage", "prometheus"],
     )

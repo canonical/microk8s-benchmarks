@@ -28,6 +28,6 @@ class DqliteMemory(Metric):
         return self.cluster.size
 
     def get_dqlite_memory(self, unit: Unit) -> int:
-        command = "pmap -X $(pgrep dqlite) | tail -n 1 | awk '{print $2}'"
-        output = self.cluster.run_in_unit(unit, command)
-        return int(output)
+        command = "pmap -X $(pgrep k8s-dqlite) | tail -n 1 | awk '{print $2}'"
+        resp = self.cluster.run_in_unit(unit, command)
+        return int(resp.stdout.decode().strip())

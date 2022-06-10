@@ -9,7 +9,7 @@ KUBECTL = "/usr/bin/kubectl"
 def _kubectl(*args):
     cmd = [KUBECTL]
     cmd.extend(args)
-    logging.debug(f"subprocess.run {';'.join(cmd)}")
+    logging.debug(f"subprocess.run {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True)
 
 

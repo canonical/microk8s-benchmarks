@@ -72,13 +72,15 @@ class Experiment:
 
     def run_workload(self, workload: Workload):
         with self.short_lived_namespace() as ns:
+
+            workload.apply(namespace=ns)
+
             with WorkloadMetrics(
                 workload=workload,
                 metrics=self.get_metrics_for_workload(workload),
                 poll_period=10,
                 store_at=self.store_metrics_at,
             ):
-                workload.apply(namespace=ns)
                 workload.wait()
 
     @contextmanager
@@ -123,10 +125,13 @@ class WorkloadMetrics(MetricsCollector):
         store_at: Path,
         poll_period: int = 10,
     ):
-        # Inject a field (new column in the metric csv file) to specify from which workload the metrics were collected.
+        # Inject a field (new column in the metric csv file) to specify
+        # from which workload the metrics were collected.
         self.workload = workload
         for metric in metrics:
-            metric.add_field(ConstantField("workload", self.workload_id))
+            field = ConstantField("workload", self.workload_id)
+            if not metric.has_field(field):
+                metric.add_field(field)
 
         super().__init__(metrics=metrics, store_at=store_at, poll_period=poll_period)
 

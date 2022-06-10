@@ -11,22 +11,14 @@ TEST_CLUSTER_INFO = ClusterInfo(
 
 
 def test_dqlite_memory_metric():
-    expected_memory = 3
-    expected_cluster_size = 2
-    expected_control_plane_nodes = 2
     cluster = Mock(
         info=TEST_CLUSTER_INFO,
-        run_in_unit=Mock(return_value=str(expected_memory)),
         size=2,
     )
+    resp_mock = Mock(stdout=b"3\n")
+    cluster.run_in_unit.return_value = resp_mock
+
     metric = DqliteMemory(cluster)
     metric.sample()
-    expected_samples = [
-        [
-            expected_cluster_size,
-            expected_control_plane_nodes,
-            expected_memory,
-            expected_memory,
-        ],
-    ]
-    assert metric.samples == expected_samples
+
+    assert metric.samples == [[2, 2, 3, 3]]

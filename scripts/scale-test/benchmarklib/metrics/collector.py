@@ -66,7 +66,6 @@ class MetricsCollector:
 
         # Create folder structure if not exists
         self.store_at.mkdir(parents=True, exist_ok=True)
-
         for metric in self.metrics:
             metric.dump(self.store_at)
 

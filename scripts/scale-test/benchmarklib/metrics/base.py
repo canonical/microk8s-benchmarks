@@ -68,6 +68,9 @@ class Metric:
     def field_names(self) -> List[str]:
         return [field.name for field in self.fields]
 
+    def has_field(self, field: Field) -> bool:
+        return field.name in self.field_names
+
     def sample(self):
         sampled_values = self.collect_field_values()
         self.samples.append(sampled_values)
