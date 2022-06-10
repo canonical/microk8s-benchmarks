@@ -3,7 +3,6 @@ import csv
 from pathlib import Path
 from typing import Any, List
 
-from benchmarklib.utils import timeit
 
 Sample = List[Any]
 
@@ -76,7 +75,6 @@ class Metric:
     def remove_field(self, field: Field) -> None:
         self.fields.remove(field)
 
-    @timeit
     def sample(self):
         sampled_values = self.collect_field_values()
         self.samples.append(sampled_values)
