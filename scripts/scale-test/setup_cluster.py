@@ -206,7 +206,7 @@ def all_nodes_joined(cluster: ClusterInfo) -> bool:
             cluster_ids.remove(node_id)
 
     if cluster_ids != []:
-        logging.debug(f"Some nodes are not ready yet: {''.join(cluster_ids)}")
+        logging.debug(f"Some nodes are not ready yet: {','.join(cluster_ids)}")
         return False
 
     return True
@@ -243,6 +243,8 @@ def setup_cluster(control_plane: int, units: List[Unit], model: str) -> ClusterI
 
 def save_cluster_info(cluster: ClusterInfo):
     clusters_path = Path.cwd() / ".clusters"
+    clusters_path.mkdir(parents=True, exist_ok=True)
+
     path = clusters_path / f"{cluster.model}.json"
     logging.info(f"Saving cluster info to {path}")
     with open(path, "w") as f:

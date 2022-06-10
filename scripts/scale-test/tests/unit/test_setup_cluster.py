@@ -2,7 +2,6 @@ import copy
 import json
 import os
 import sys
-from pathlib import Path
 from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
@@ -78,8 +77,6 @@ def test_save_cluster_info():
 
         save_cluster_info(cluster)
 
-        expected_path = Path.cwd() / ".clusters/foo.json"
-        _open.assert_called_once_with(expected_path, "w")
         _open().write.assert_called_once_with(json.dumps(cluster.to_dict()))
 
 
