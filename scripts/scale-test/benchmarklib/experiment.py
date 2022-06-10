@@ -104,7 +104,8 @@ class Experiment:
     def teardown(self):
         logging.info("Cluster teardown")
         if len(self.required_addons) > 0:
-            self.cluster.disable(self.required_addons)
+            for addon in self.required_addons:
+                self.cluster.disable(addon)
 
     def run(self):
         with safe_kubeconfig(self.cluster):
@@ -125,19 +126,27 @@ class WorkloadMetrics(MetricsCollector):
         store_at: Path,
         poll_period: int = 10,
     ):
-        # Inject a field (new column in the metric csv file) to specify
-        # from which workload the metrics were collected.
         self.workload = workload
-        for metric in metrics:
-            field = ConstantField("workload", self.workload_id)
-            if not metric.has_field(field):
-                metric.add_field(field)
-
+        self.workload_field = ConstantField("workload", self.workload_id)
         super().__init__(metrics=metrics, store_at=store_at, poll_period=poll_period)
 
     @property
     def workload_id(self):
         return str(self.workload.yaml)
+
+    def __enter__(self):
+        super().__enter__()
+        # Inject a field (new column in the metric csv file) to specify
+        # from which workload the metrics were collected.
+        for metric in self.metrics:
+            metric.add_field(self.workload_field)
+        return self
+
+    def __exit__(self, *exc):
+        super().__exit__(self, *exc)
+        # Cleanup workload field
+        for metric in self.metrics:
+            metric.remove_field(self.workload_field)
 
 
 class safe_kubeconfig(ContextDecorator):
