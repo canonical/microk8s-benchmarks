@@ -7,7 +7,7 @@ from pathlib import Path
 from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.experiment import Experiment
 from benchmarklib.workload import Workload
-from scale_test.metrics import DqliteMemory
+from scale_test.metrics import DqliteCPU, DqliteMemory
 
 MINUTE = 60
 WORKLOAD_TIME = 5 * MINUTE
@@ -58,7 +58,8 @@ def main():
 
     # Metrics
     dqlite_memory = DqliteMemory(cluster)
-    scaletest.register_metrics([dqlite_memory])
+    dqlite_cpu = DqliteCPU(cluster)
+    scaletest.register_metrics([dqlite_memory, dqlite_cpu])
 
     scaletest.run()
 
