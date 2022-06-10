@@ -33,6 +33,10 @@ class ClusterInfo:
             workers=[Unit(**worker) for worker in data["workers"]],
         )
 
+    @property
+    def nodes(self) -> List[Unit]:
+        return self.control_plane + self.workers
+
 
 @dataclass
 class DockerCredentials:

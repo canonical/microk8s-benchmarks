@@ -152,6 +152,7 @@ def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = Fa
     logging.debug(f"Join output: {resp.stdout.decode()[:1000]}")
 
 
+@timeit
 def wait_for_nodes_to_join(cluster: ClusterInfo, max_wait: int = 5 * MINUTE):
     logging.info("Waiting for nodes to join the cluster...")
     check_period = 30
@@ -170,16 +171,19 @@ def wait_for_nodes_to_join(cluster: ClusterInfo, max_wait: int = 5 * MINUTE):
 
 
 def all_nodes_joined(cluster: ClusterInfo) -> bool:
+    """
+    Check whether all nodes in the cluster appear as ready
+    in the kubectl get nodes command.
+    """
+    # Get nodes readiness info
     command = "microk8s.kubectl get nodes -o json"
     resp = juju.run(command, unit=cluster.master.name)
     resp.check_returncode()
+    kubectl_get_nodes = json.loads(resp.stdout.decode())
 
-    cluster_ids = [node.instance_id for node in cluster.control_plane + cluster.workers]
-
-    get_nodes = json.loads(resp.stdout.decode())
-
-    not_ready = []
-    for item in get_nodes["items"]:
+    # Parse output to check that all cluster nodes show up as ready
+    cluster_ids = [node.instance_id for node in cluster.nodes]
+    for item in kubectl_get_nodes["items"]:
         if item["kind"] != "Node":
             continue
 
@@ -198,11 +202,11 @@ def all_nodes_joined(cluster: ClusterInfo) -> bool:
                 is_ready = True
                 break
 
-        if not is_ready:
-            not_ready.append(node_id)
+        if is_ready:
+            cluster_ids.remove(node_id)
 
-    if not_ready != []:
-        logging.debug(f"Some nodes are not ready yet: {''.join(not_ready)}")
+    if cluster_ids != []:
+        logging.debug(f"Some nodes are not ready yet: {''.join(cluster_ids)}")
         return False
 
     return True
