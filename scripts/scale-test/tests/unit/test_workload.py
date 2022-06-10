@@ -1,10 +1,10 @@
 from unittest.mock import patch
 
-from benchmarks.workload import Workload
+from benchmarklib.workload import Workload
 
 
-@patch("benchmarks.workload.time.time", side_effect=[10, 11, 12, 12])
-@patch("benchmarks.workload.time.sleep")
+@patch("benchmarklib.workload.time.time", side_effect=[10, 11, 12, 12])
+@patch("benchmarklib.workload.time.sleep")
 def test_wait(_time_sleep, _time_time):
 
     poll_period = 3

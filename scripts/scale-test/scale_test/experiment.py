@@ -4,12 +4,13 @@ import argparse
 import logging
 from pathlib import Path
 
-from benchmarks.cluster import Microk8sCluster
-from benchmarks.experiment import Experiment
-from benchmarks.workload import Workload
+from benchmarklib.cluster import Microk8sCluster
+from benchmarklib.experiment import Experiment
+from benchmarklib.workload import Workload
+from scale_test.metrics import DqliteMemory
 
 MINUTE = 60
-WORKLOAD_TIME = 2 * MINUTE
+WORKLOAD_TIME = 5 * MINUTE
 
 LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -36,19 +37,29 @@ def configure_logging(args: argparse.Namespace) -> None:
 def main():
     args = parse_args()
     configure_logging(args)
+
+    # Setup cluster manager
     cluster = Microk8sCluster.from_file(Path(args.cluster_file))
+
+    # Experiment
     scaletest = Experiment(
-        "scale_testing",
+        "scale-test",
         cluster=cluster,
         required_addons=["dns", "hostpath-storage", "prometheus"],
     )
-    scaletest.register_workloads(
-        [
-            Workload("workloads/stateless.yaml", duration=WORKLOAD_TIME),
-            Workload("workloads/stateful.yaml", duration=WORKLOAD_TIME),
-            Workload("workloads/ingress.yaml", duration=WORKLOAD_TIME),
-        ]
-    )
+
+    # Workloads
+    cwd = Path(__file__).parent.resolve()
+    workloads = cwd / "workloads"
+    stateless = Workload(workloads / "stateless.yaml", duration=WORKLOAD_TIME)
+    stateful = Workload(workloads / "stateful.yaml", duration=WORKLOAD_TIME)
+    ingress = Workload(workloads / "ingress.yaml", duration=WORKLOAD_TIME)
+    scaletest.register_workloads([stateless, stateful, ingress])
+
+    # Metrics
+    dqlite_memory = DqliteMemory(cluster)
+    scaletest.register_metrics([dqlite_memory])
+
     scaletest.run()
 
 

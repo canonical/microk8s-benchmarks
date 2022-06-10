@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from benchmarks.utils import pp_time
+from benchmarklib.utils import pp_time
 
 from .clients import kubectl
 

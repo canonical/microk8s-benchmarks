@@ -4,11 +4,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from benchmarks.experiment import Experiment, safe_kubeconfig
+from benchmarklib.experiment import Experiment, safe_kubeconfig
 
 
-@patch("benchmarks.experiment.safe_kubeconfig", autospec=True)
-@patch("benchmarks.experiment.Experiment.teardown")
+@patch("benchmarklib.experiment.safe_kubeconfig", autospec=True)
+@patch("benchmarklib.experiment.Experiment.teardown")
 def test_run_calls_teardown_on_graceful_exit(_teardown, _safe_kubeconfig):
     exp = Experiment("foo", None)
 
@@ -17,9 +17,9 @@ def test_run_calls_teardown_on_graceful_exit(_teardown, _safe_kubeconfig):
     _teardown.assert_called_once()
 
 
-@patch("benchmarks.experiment.safe_kubeconfig", autospec=True)
-@patch("benchmarks.experiment.Experiment.teardown")
-@patch("benchmarks.experiment.Experiment.start")
+@patch("benchmarklib.experiment.safe_kubeconfig", autospec=True)
+@patch("benchmarklib.experiment.Experiment.teardown")
+@patch("benchmarklib.experiment.Experiment.start")
 def test_run_calls_teardown_on_exception(_start, _teardown, _safe_kubeconfig):
     exp = Experiment("foo", None)
 
@@ -50,11 +50,11 @@ def test_cluster_is_reset_between_workloads():
     assert cluster.delete_namespace.call_count == 2
 
 
-def test_tmp_namespace():
+def test_short_lived_namespace():
     cluster = Mock()
     exp = Experiment("foo", cluster)
 
-    with exp.tmp_namespace() as namespace:
+    with exp.short_lived_namespace() as namespace:
         assert namespace == "foo"
         cluster.create_namespace.assert_called_once_with("foo")
         cluster.delete_namespace.assert_not_called()
@@ -95,3 +95,50 @@ def test_safe_kubeconfig(fake_kube_config):
     # Check previous config was recovered
     with open(fake_kube_config, "r") as f:
         assert f.read() == "previous_config"
+
+
+def test_register_metrics():
+    exp = Experiment("foo", cluster=Mock())
+    workload1 = "workload1"
+    workload2 = "workload2"
+    workload3 = "workload3"
+    workload4 = "workload4"
+
+    metric1 = "metric1"
+    metric2 = "metric2"
+    metrics_for_all = [metric1, metric2]
+
+    workload1_metric1 = "workload1_metric1"
+    workload1_metric2 = "workload1_metric2"
+    workload2_metric1 = "workload2_metric1"
+
+    foo_metric = "foo"
+    bar_metric = "bar"
+    metrics_for_w3_and_w4 = [foo_metric, bar_metric]
+
+    # Register metrics for all workloads
+    exp.register_metrics(metrics_for_all)
+
+    # Register workload-specific metrics
+    exp.register_workloads(workload1, metrics=[workload1_metric1, workload1_metric2])
+    exp.register_workloads(workload2, metrics=[workload2_metric1])
+
+    exp.register_workloads([workload3, workload4], metrics=metrics_for_w3_and_w4)
+
+    assert exp.get_metrics_for_workload(workload1) == [
+        metric1,
+        metric2,
+        workload1_metric1,
+        workload1_metric2,
+    ]
+    assert exp.get_metrics_for_workload(workload2) == [
+        metric1,
+        metric2,
+        workload2_metric1,
+    ]
+    assert exp.get_metrics_for_workload(workload3) == [
+        metric1,
+        metric2,
+        foo_metric,
+        bar_metric,
+    ]

@@ -5,9 +5,9 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from benchmarks.clients import juju
-from benchmarks.cluster import Microk8sCluster
-from benchmarks.models import ClusterInfo, Unit
+from benchmarklib.clients import juju
+from benchmarklib.cluster import Microk8sCluster
+from benchmarklib.models import ClusterInfo, Unit
 
 TEST_UNIT = Unit(name="foo", ip="bar", instance_id="ba")
 
@@ -17,7 +17,7 @@ TEST_CLUSTER_INFO = ClusterInfo(master=TEST_UNIT, control_plane=[TEST_UNIT], wor
 def test_from_file():
     read_data = json.dumps(TEST_CLUSTER_INFO.to_dict()).encode()
 
-    with patch("benchmarks.cluster.open", mock_open(read_data=read_data)):
+    with patch("benchmarklib.cluster.open", mock_open(read_data=read_data)):
 
         cluster = Microk8sCluster.from_file("/some/path")
 

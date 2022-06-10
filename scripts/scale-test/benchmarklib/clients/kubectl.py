@@ -9,12 +9,12 @@ KUBECTL = "/usr/bin/kubectl"
 def _kubectl(*args):
     cmd = [KUBECTL]
     cmd.extend(args)
-    logging.debug(f"subprocess.run {';'.join(cmd)}")
+    logging.debug(f"subprocess.run {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True)
 
 
 def apply(yaml: Path, namespace: Optional[str] = None) -> None:
-    command = ["apply", "-f", yaml]
+    command = ["apply", "-f", str(yaml)]
     if namespace is not None:
         command.append(f"--namespace={namespace}")
     return _kubectl(*command).check_returncode()
