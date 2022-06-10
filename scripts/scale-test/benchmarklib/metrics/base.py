@@ -3,6 +3,7 @@ import csv
 from pathlib import Path
 from typing import Any, List
 
+
 Sample = List[Any]
 
 
@@ -63,6 +64,9 @@ class Metric:
         for field in self.fields:
             sample.append(field.collect())
         return sample
+
+    def clear(self):
+        self.samples = []
 
     @property
     def field_names(self) -> List[str]:

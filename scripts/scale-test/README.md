@@ -31,6 +31,8 @@ will create a new juju model named `mycluster`, spin up 10 ubuntu instances on i
 
 Check out `python setup_cluster.py --help` for more detailed instructions on how to use the tool.
 
+Note that a `<model>_cluster.json` file will be created with some information about the cluster at hand. This is later needed to run experiments.
+
 #### Docker credentials
 If you are trying to setup a large cluster, you will most probably hit dockerhub rate-limit errors (see [this documentation page](https://microk8s.io/docs/dockerhub-limits)).
 
@@ -56,3 +58,12 @@ If you are running this script on a network-restricted environment (like vSphere
 ```bash
 python setup_cluster.py --http-proxy http://squid.internal:3128
 ```
+
+### 3. Running the experiment
+The experiment consists on deploying some workloads (yaml files) on a temporary namespace during some time. Some measurements are done on nodes, like cpu and memory usage of dqlite processes on control plane nodes. The resulting metric csv files will be stored under `data/scale-test/run_{date}/`.
+
+To run the experiment on a specific cluster, just do:
+```bash
+PYTHONPATH=$PYTHONPATH:. python scale_test/experiment.py -c mycluster_cluster.json
+```
+Where `mycluster_cluster.json` is the file output from the `setup_cluster.py` step.  

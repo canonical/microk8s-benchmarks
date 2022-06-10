@@ -105,7 +105,7 @@ class Experiment:
         logging.info("Cluster teardown")
         if len(self.required_addons) > 0:
             for addon in self.required_addons:
-                self.cluster.disable(addon)
+                self.cluster.disable([addon])
 
     def run(self):
         with safe_kubeconfig(self.cluster):

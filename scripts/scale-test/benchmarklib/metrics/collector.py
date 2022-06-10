@@ -38,6 +38,7 @@ class MetricsCollector:
                 m.sample()
 
             elapsed = time.time() - start
+
             sleep_time = max(self.poll_period - elapsed, 0)
             if sleep_time == 0:
                 logging.warning(
@@ -69,6 +70,10 @@ class MetricsCollector:
         for metric in self.metrics:
             metric.dump(self.store_at)
 
+    def clear_metrics(self):
+        for metric in self.metrics:
+            metric.clear()
+
     def __enter__(self):
         if self.metrics:
             self.start_thread()
@@ -78,3 +83,4 @@ class MetricsCollector:
         if self._started:
             self.stop_thread()
             self.dump()
+            self.clear_metrics()
