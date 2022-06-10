@@ -11,7 +11,9 @@ from benchmarklib.models import ClusterInfo, Unit
 
 TEST_UNIT = Unit(name="foo", ip="bar", instance_id="ba")
 
-TEST_CLUSTER_INFO = ClusterInfo(master=TEST_UNIT, control_plane=[TEST_UNIT], workers=[])
+TEST_CLUSTER_INFO = ClusterInfo(
+    model="test", master=TEST_UNIT, control_plane=[TEST_UNIT], workers=[]
+)
 
 
 def test_from_file():

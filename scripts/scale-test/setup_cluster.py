@@ -213,14 +213,16 @@ def all_nodes_joined(cluster: ClusterInfo) -> bool:
 
 
 @timeit
-def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
+def setup_cluster(control_plane: int, units: List[Unit], model: str) -> ClusterInfo:
     n_workers = len(units) - control_plane
     logging.info(
         f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
     )
     master_node = units.pop(0)
     control_plane -= 1  # master is running control plane already
-    cluster = ClusterInfo(master=master_node, control_plane=[master_node], workers=[])
+    cluster = ClusterInfo(
+        model=model, master=master_node, control_plane=[master_node], workers=[]
+    )
     if len(units) == 0:
         # Single-node cluster. No nodes to join
         return cluster
@@ -239,7 +241,9 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
     return cluster
 
 
-def save_cluster_info(cluster: ClusterInfo, path: Path = "cluster.json"):
+def save_cluster_info(cluster: ClusterInfo):
+    clusters_path = Path.cwd() / ".clusters"
+    path = clusters_path / f"{cluster.model}.json"
     logging.info(f"Saving cluster info to {path}")
     with open(path, "w") as f:
         f.write(json.dumps(cluster.to_dict()))
@@ -368,17 +372,18 @@ def destroy_model(model: str):
 @timeit
 def main():
     args = parse_arguments()
+    model = args.model
     try:
-        units = deploy_units(args.model, args.nodes)
+        units = deploy_units(model, args.nodes)
         install_microk8s(
-            args.model,
+            model,
             units,
             channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
         )
-        cluster = setup_cluster(args.control_plane, units)
-        save_cluster_info(cluster, path=Path(f"{args.model}_cluster.json"))
+        cluster = setup_cluster(args.control_plane, units, model)
+        save_cluster_info(cluster)
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
     except Exception:
