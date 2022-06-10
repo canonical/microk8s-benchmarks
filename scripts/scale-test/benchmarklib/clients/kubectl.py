@@ -14,7 +14,7 @@ def _kubectl(*args):
 
 
 def apply(yaml: Path, namespace: Optional[str] = None) -> None:
-    command = ["apply", "-f", yaml]
+    command = ["apply", "-f", str(yaml)]
     if namespace is not None:
         command.append(f"--namespace={namespace}")
     return _kubectl(*command).check_returncode()
