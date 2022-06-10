@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List, Optional
@@ -14,7 +15,7 @@ from benchmarks.utils import timeit
 
 APP_NAME = "microk8s-node"
 DEFAULT_CHANNEL = "1.24/stable"
-
+MINUTE = 60
 
 LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -53,7 +54,7 @@ def configure_http_proxy(http_proxy: str):
             f"echo http_proxy={http_proxy} >> /etc/environment",
             "local_ip=$(hostname -I) | awk '{print $1}'",
             "juju_instance_id=$(grep \"juju\" /etc/hosts | head -n 1 | awk '{print $NF}')",
-            'noproxy="10.1.0.0/16,10.152.183.0/24,127.0.0.1,${local_ip},${juju_instance_id}"',
+            'noproxy="10.0.0.0/8,127.0.0.1,${local_ip},${juju_instance_id}"',
             "echo no_proxy=${noproxy} >> /etc/environment",
             "echo NO_PROXY=${noproxy} >> /etc/environment",
         ]
@@ -146,7 +147,69 @@ def join_nodes_to_cluster(nodes: List[Unit], join_url: str, as_worker: bool = Fa
         logging.info(f"Joining worker nodes to cluster: {nodes}")
     else:
         logging.info(f"Joining control plane nodes to cluster: {nodes}")
-    juju.run(join_command, units=nodes).check_returncode()
+    resp = juju.run(join_command, units=nodes)
+    resp.check_returncode()
+    logging.debug(f"Join output: {resp.stdout.decode()[:1000]}")
+
+
+@timeit
+def wait_for_nodes_to_join(cluster: ClusterInfo, max_wait: int = 5 * MINUTE):
+    logging.info("Waiting for nodes to join the cluster...")
+    check_period = 30
+
+    start = time.time()
+    while True:
+        if all_nodes_joined(cluster):
+            logging.info("All nodes have joined the cluster")
+            break
+
+        if (time.time() - start) > max_wait:
+            logging.warning("Some nodes haven't joined the cluster yet")
+            break
+
+        time.sleep(check_period)
+
+
+def all_nodes_joined(cluster: ClusterInfo) -> bool:
+    """
+    Check whether all nodes in the cluster appear as ready
+    in the kubectl get nodes command.
+    """
+    # Get nodes readiness info
+    command = "microk8s.kubectl get nodes -o json"
+    resp = juju.run(command, unit=cluster.master.name)
+    resp.check_returncode()
+    kubectl_get_nodes = json.loads(resp.stdout.decode())
+
+    # Parse output to check that all cluster nodes show up as ready
+    cluster_ids = [node.instance_id for node in cluster.nodes]
+    for item in kubectl_get_nodes["items"]:
+        if item["kind"] != "Node":
+            continue
+
+        node_id = item["metadata"]["name"]
+        if node_id not in cluster_ids:
+            logging.warning(f"Node not known to cluster {node_id}. Ignoring...")
+            continue
+
+        is_ready = False
+        for condition in item["status"]["conditions"]:
+            if (
+                condition["type"] == "Ready"  # noqa
+                and condition["status"] == "True"  # noqa
+                and condition["reason"] == "KubeletReady"  # noqa
+            ):
+                is_ready = True
+                break
+
+        if is_ready:
+            cluster_ids.remove(node_id)
+
+    if cluster_ids != []:
+        logging.debug(f"Some nodes are not ready yet: {''.join(cluster_ids)}")
+        return False
+
+    return True
 
 
 @timeit
@@ -171,6 +234,8 @@ def setup_cluster(control_plane: int, units: List[Unit]) -> ClusterInfo:
     if w_units:
         join_nodes_to_cluster(w_units, join_url, as_worker=True)
         cluster.workers.extend(w_units)
+
+    wait_for_nodes_to_join(cluster, max_wait=10 * MINUTE)
     return cluster
 
 

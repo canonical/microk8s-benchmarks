@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import sys
@@ -8,6 +9,7 @@ import pytest
 from benchmarks.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
 from benchmarks.models import ClusterInfo, DockerCredentials, Unit
 from setup_cluster import (
+    all_nodes_joined,
     deploy_units,
     get_docker_credentials,
     get_join_cluster_url,
@@ -77,10 +79,11 @@ def test_save_cluster_info():
         _open().write.assert_called_once_with(json.dumps(cluster.to_dict()))
 
 
+@patch("setup_cluster.all_nodes_joined", return_value=True)
 @patch("setup_cluster.get_join_cluster_url")
 @patch("setup_cluster.join_nodes_to_cluster")
 def test_setup_cluster_joins_correct_number_of_worker_nodes(
-    _join_nodes_to_cluster, _get_join_cluster_url
+    _join_nodes_to_cluster, _get_join_cluster_url, _all_nodes_joined
 ):
     master_node = Unit(name="master", ip="masterip", instance_id="masterid")
     other_node = Unit(name="node1", ip="node1ip", instance_id="node1id")
@@ -206,3 +209,80 @@ def test_get_docker_credentials():
     assert get_docker_credentials(not_in_args) == DockerCredentials(
         username="baz", password="hello"
     )
+
+
+GET_NODES_JSON = {
+    "apiVersion": "v1",
+    "items": [
+        {
+            "kind": "Node",
+            "metadata": {"name": "node-0"},
+            "status": {
+                "conditions": [
+                    {"reason": "KubeletReady", "status": "True", "type": "Ready"}
+                ]
+            },
+        },
+        {
+            "kind": "Node",
+            "metadata": {"name": "node-2"},
+            "status": {
+                "conditions": [
+                    {"reason": "KubeletReady", "status": "True", "type": "Ready"}
+                ]
+            },
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Node",
+            "metadata": {"name": "node-4"},
+            "spec": {},
+            "status": {
+                "conditions": [
+                    {"reason": "KubeletReady", "status": "True", "type": "Ready"}
+                ]
+            },
+        },
+        {
+            "kind": "Node",
+            "metadata": {"name": "node-1"},
+            "status": {
+                "conditions": [
+                    {"reason": "KubeletReady", "status": "True", "type": "Ready"}
+                ]
+            },
+        },
+        {
+            "kind": "Node",
+            "metadata": {"name": "node-3"},
+            "status": {
+                "conditions": [
+                    {"reason": "KubeletReady", "status": "True", "type": "Ready"}
+                ]
+            },
+        },
+    ],
+}
+
+
+@patch("setup_cluster.juju.run")
+def test_all_nodes_joined_true(_juju_run):
+    _juju_run.return_value.stdout = json.dumps(GET_NODES_JSON).encode()
+
+    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
+    cluster = ClusterInfo(master=units[0], control_plane=units, workers=[])
+
+    assert all_nodes_joined(cluster) is True
+
+
+@patch("setup_cluster.juju.run")
+def test_all_nodes_joined_false(_juju_run):
+    get_nodes_false_output = copy.deepcopy(GET_NODES_JSON)
+    get_nodes_false_output["items"][0]["status"]["conditions"][0]["status"] = "False"
+    test_get_nodes_json = json.dumps(get_nodes_false_output).encode()
+    _juju_run.return_value.stdout = test_get_nodes_json
+
+    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
+    cluster = ClusterInfo(master=units[0], control_plane=units, workers=[])
+
+    assert all_nodes_joined(cluster) is False
