@@ -14,12 +14,14 @@ class Unit:
 
 @dataclass
 class ClusterInfo:
+    model: str
     master: Unit
     workers: List[Unit]
     control_plane: List[Unit]
 
     def to_dict(self) -> dict:
         return {
+            "model": self.model,
             "master": self.master.to_dict(),
             "workers": [u.to_dict() for u in self.workers],
             "control_plane": [u.to_dict() for u in self.control_plane],
@@ -28,6 +30,7 @@ class ClusterInfo:
     @classmethod
     def from_json(klass, data: Dict[str, str]) -> "ClusterInfo":
         return klass(
+            model=data["model"],
             master=Unit(**data["master"]),
             control_plane=[Unit(**cp) for cp in data["control_plane"]],
             workers=[Unit(**worker) for worker in data["workers"]],

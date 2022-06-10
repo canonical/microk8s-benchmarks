@@ -71,11 +71,12 @@ def test_get_units(_juju_status):
 def test_save_cluster_info():
     with patch("setup_cluster.open", mock_open()) as _open:
         unit = Unit(name="foo", ip="bar", instance_id="ba")
-        cluster = ClusterInfo(master=unit, control_plane=[unit], workers=[])
+        cluster = ClusterInfo(
+            model="foo", master=unit, control_plane=[unit], workers=[]
+        )
 
         save_cluster_info(cluster)
 
-        _open.assert_called_once_with("cluster.json", "w")
         _open().write.assert_called_once_with(json.dumps(cluster.to_dict()))
 
 
@@ -91,20 +92,21 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
 
     # Try with 1/2 control plane nodes
     units = [master_node, other_node]
-    cluster = setup_cluster(1, units)
+    cluster = setup_cluster(1, units, "foo")
 
     _get_join_cluster_url.assert_called_once_with(master_node)
     join_url = _get_join_cluster_url.return_value
     _join_nodes_to_cluster.assert_called_once_with(
         [other_node], join_url, as_worker=True
     )
+    assert cluster.model == "foo"
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node]
     assert cluster.workers == [other_node]
 
     # Try now with 2/3 control planes nodes
     units = [master_node, other_node, third_node]
-    cluster = setup_cluster(2, units)
+    cluster = setup_cluster(2, units, "bar")
 
     _join_nodes_to_cluster.assert_has_calls(
         [call([other_node], join_url), call([third_node], join_url, as_worker=True)]
@@ -270,7 +272,7 @@ def test_all_nodes_joined_true(_juju_run):
     _juju_run.return_value.stdout = json.dumps(GET_NODES_JSON).encode()
 
     units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(master=units[0], control_plane=units, workers=[])
+    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
 
     assert all_nodes_joined(cluster) is True
 
@@ -283,6 +285,6 @@ def test_all_nodes_joined_false(_juju_run):
     _juju_run.return_value.stdout = test_get_nodes_json
 
     units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(master=units[0], control_plane=units, workers=[])
+    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
 
     assert all_nodes_joined(cluster) is False

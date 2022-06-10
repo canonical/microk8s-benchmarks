@@ -6,7 +6,10 @@ from scale_test.metrics import DqliteCPU, DqliteMemory
 TEST_UNIT_1 = Unit(name="unit_1", ip="bar", instance_id="ba")
 TEST_UNIT_2 = Unit(name="unit_2", ip="bar", instance_id="ba")
 TEST_CLUSTER_INFO = ClusterInfo(
-    master=TEST_UNIT_1, control_plane=[TEST_UNIT_1, TEST_UNIT_2], workers=[]
+    model="test",
+    master=TEST_UNIT_1,
+    control_plane=[TEST_UNIT_1, TEST_UNIT_2],
+    workers=[],
 )
 
 

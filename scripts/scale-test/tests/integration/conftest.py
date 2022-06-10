@@ -28,7 +28,9 @@ def subprocess_run_mock():
 def cluster_json():
     f = tempfile.NamedTemporaryFile(delete=False)
     master = Unit(name="name", ip="ip", instance_id="id")
-    cluster = ClusterInfo(master=master, control_plane=[master], workers=[])
+    cluster = ClusterInfo(
+        model="foo", master=master, control_plane=[master], workers=[]
+    )
     f.write(json.dumps(cluster.to_dict()).encode())
     f.file.flush()
 
