@@ -62,7 +62,7 @@ python setup_cluster.py --http-proxy http://squid.internal:3128
 ### 3. Running the experiment
 The experiment consists on deploying some workloads (yaml files) on a temporary namespace during some time. Some measurements are done on nodes, like cpu and memory usage of dqlite processes on control plane nodes. The resulting metric csv files will be stored under `data/scale-test/run_{date}/`.
 
-To run an experiment on a specific cluster, just do:
+To run the experiment on a specific cluster, just do:
 ```bash
 PYTHONPATH=$PYTHONPATH:. python scale_test/experiment.py -c mycluster_cluster.json
 ```
