@@ -1,7 +1,7 @@
 import json
 import logging
 import subprocess
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"
@@ -52,7 +52,7 @@ class JujuSession:
     def add_units(self, units: int):
         return add_unit(units, self.app, self.model)
 
-    def get_units(self) -> List[str]:
+    def get_units(self) -> List[Dict[str, str]]:
         """
         Build the list of ubuntu units from the juju status output
         """

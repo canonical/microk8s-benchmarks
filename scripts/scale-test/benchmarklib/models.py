@@ -17,6 +17,7 @@ class Unit:
 class ClusterInfo:
     app: str
     model: str
+    app: str
     master: Unit
     workers: List[Unit]
     control_plane: List[Unit]

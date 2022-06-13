@@ -84,9 +84,11 @@ class Experiment:
     @contextmanager
     def short_lived_namespace(self):
         """
-        We deploy workloads on a new temporary namespace to that it is easier to cleanup whatever was deployed.
+        We deploy workloads on a new temporary namespace so that it is easier
+        to cleanup whatever was deployed.
         """
         # TODO: Verify namespace is conformant to: [a-z0-9]([-a-z0-9]*[a-z0-9])?'
+        # and if not, raise an error.
         namespace = self.name.replace("_", "-")
         self.cluster.create_namespace(namespace)
 
@@ -102,9 +104,8 @@ class Experiment:
 
     def teardown(self):
         logging.info("Cluster teardown")
-        if len(self.required_addons) > 0:
-            for addon in self.required_addons:
-                self.cluster.disable([addon.disable])
+        for addon in self.required_addons:
+            self.cluster.disable([addon.disable])
 
     def run(self):
         with fetch_kubeconfig(self.cluster):
@@ -161,6 +162,7 @@ class fetch_kubeconfig(ContextDecorator):
     def __enter__(self):
         self.fetch_kubeconfig_from_cluster()
         os.environ["KUBECONFIG"] = str(self.config_file)
+        return self
 
     def __exit__(self, *exc):
         self.cleanup_kubeconfig()

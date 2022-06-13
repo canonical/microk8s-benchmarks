@@ -2,8 +2,10 @@
 
 import json
 import logging
+import os
 import time
 from argparse import ArgumentParser, Namespace
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Optional
 
@@ -274,9 +276,27 @@ class JujuClusterSetup:
         clusters_path.mkdir(parents=True, exist_ok=True)
 
         path = clusters_path / f"{cluster.model}.json"
+
         logging.info(f"Saving cluster info to {path}")
         with open(path, "w") as f:
             f.write(json.dumps(cluster.to_dict()))
+
+    def cleanup_cluster_info(self, cluster: ClusterInfo):
+        clusters_path = Path.cwd() / ".clusters"
+        path = clusters_path / f"{cluster.model}.json"
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            # Not there anymore
+            pass
+
+    @contextmanager
+    def temporary_setup(self):
+        try:
+            cluster_info = self.setup()
+            yield cluster_info
+        finally:
+            self.destroy()
 
     def setup(self) -> ClusterInfo:
         worker_nodes = self.total_nodes - self.control_plane_nodes
@@ -293,6 +313,12 @@ class JujuClusterSetup:
         self.save_cluster_info(cluster_info)
         self.cluster_info = cluster_info
         return cluster_info
+
+    def destroy(self):
+        logging.info(f"Destroying cluster in model {self.model}")
+        self.juju.destroy_model()
+        if self.cluster_info:
+            self.cleanup_cluster_info(self.cluster_info)
 
 
 def get_docker_credentials(
@@ -378,50 +404,30 @@ def configure_logging(debug: bool = False):
     logging.root.setLevel(level=level)
 
 
-def destroy_model(model: str):
-    logging.warning(f"Destroying model {model}")
-    JujuSession(model, APP_NAME).destroy_model()
-
-
-def setup_cluster(
-    model: str,
-    total_nodes: int,
-    control_plane: int,
-    channel: str,
-    http_proxy: Optional[str] = None,
-    creds: Optional[DockerCredentials] = None,
-) -> ClusterInfo:
-    mgr = JujuClusterSetup(
-        model,
-        total_nodes,
-        control_plane,
-        channel,
-        http_proxy=http_proxy,
-        creds=creds,
-    )
-    return mgr.setup()
-
-
 @timeit
 def main():
     args = parse_arguments()
+    error = False
     try:
-        setup_cluster(
-            args.model,
-            args.nodes,
-            args.control_plane,
-            args.channel,
+        mgr = JujuClusterSetup(
+            model=args.model,
+            total_nodes=args.nodes,
+            control_plane_nodes=args.control_plane,
+            channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
         )
+        mgr.setup()
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
+        error = True
     except Exception:
         logging.exception("Unexpected error")
+        error = True
         raise
     finally:
-        if args.destroy_on_error:
-            destroy_model(args.model)
+        if error and args.destroy_on_error:
+            mgr.destroy()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Union
 
 from benchmarklib.clients import kubectl
 from benchmarklib.clients.juju import JujuSession
@@ -21,7 +21,7 @@ class Microk8sCluster:
     Handles interactions to the Microk8s cluster
     """
 
-    def __init__(self, info: Optional[ClusterInfo] = None):
+    def __init__(self, info: ClusterInfo):
         self.info = info
         self.juju = JujuSession(model=info.model, app=info.app)
 
@@ -42,6 +42,7 @@ class Microk8sCluster:
         unit_name = unit
         if isinstance(unit, Unit):
             unit_name = unit.name
+
         resp = self.juju.run_in_unit(command, unit=unit_name)
         try:
             resp.check_returncode()

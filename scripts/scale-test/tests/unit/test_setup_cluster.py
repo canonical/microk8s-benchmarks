@@ -43,6 +43,15 @@ def test_destroys_model_on_error(_destroy_model, _deploy):
     _destroy_model.assert_called_once()
 
 
+@patch.object(sys, "argv", ["setup_cluster", "--destroy-on-error"])
+@patch("setup_cluster.JujuClusterSetup.setup")
+@patch("setup_cluster.JujuSession.destroy_model")
+def test_does_not_destroy_model_if_no_error(_destroy_model, _deploy):
+    main()
+
+    _destroy_model.assert_not_called()
+
+
 @patch("setup_cluster.JujuSession")
 def test_deploy_units_deploys_correct_number_of_replicas(_juju):
     units = 10
@@ -304,3 +313,33 @@ def test_all_nodes_joined_false(_juju_run):
 
     mgr = juju_cluster_setup()
     assert mgr.all_nodes_joined(cluster) is False
+
+
+@patch("setup_cluster.JujuClusterSetup.destroy")
+@patch("setup_cluster.JujuClusterSetup.setup")
+def test_temporary_setup_destroys_cluster(_setup, _destroy):
+    mgr = juju_cluster_setup()
+
+    # Check when there is an exception in setup
+    mgr.setup.side_effect = ValueError("bar")
+    with pytest.raises(ValueError):
+        with mgr.temporary_setup():
+            pass
+
+    mgr.destroy.assert_called_once()
+    mgr.destroy.reset_mock()
+    mgr.setup.side_effect = None
+
+    # Check when there is an exception in code block
+    with pytest.raises(ValueError):
+        with mgr.temporary_setup():
+            raise ValueError("foo")
+
+    mgr.destroy.assert_called_once()
+    mgr.destroy.reset_mock()
+
+    # Check when no errors
+    with mgr.temporary_setup():
+        pass
+
+    mgr.destroy.assert_called_once()
