@@ -1,4 +1,6 @@
 import logging
+import queue
+import sys
 import threading
 import time
 from pathlib import Path
@@ -18,7 +20,7 @@ class MetricsCollector:
     def __init__(
         self,
         metrics: List[Metric],
-        store_at: Path,
+        store_at: Optional[Path] = None,
         poll_period: Optional[int] = None,
     ):
         self.metrics = metrics
@@ -52,7 +54,7 @@ class MetricsCollector:
     def start_thread(self):
         logging.info("Starting collection of metrics")
         self.stop_event = threading.Event()
-        self.thread = threading.Thread(
+        self.thread = CollectorThread(
             target=self._collect_samples,
         )
         self.thread.start()
@@ -65,6 +67,10 @@ class MetricsCollector:
         self._started = False
 
     def dump(self):
+        if self.store_at is None:
+            logging.warning("Skipping metrics dump: store_at attribute not specified")
+            return
+
         logging.info("Saving metrics data...")
 
         # Create folder structure if not exists
@@ -82,7 +88,38 @@ class MetricsCollector:
         return self
 
     def __exit__(self, *args, **kwargs):
-        if self._started:
-            self.stop_thread()
-            self.dump()
-            self.clear_metrics()
+        if not self._started:
+            return
+
+        if self.thread.child_exception:
+            _, exc_obj, _ = self.thread.child_exception
+            # Bubble up to main process
+            raise exc_obj
+
+        self.stop_thread()
+        self.dump()
+        self.clear_metrics()
+
+
+class CollectorThread(threading.Thread):
+    def __init__(self, *args, **kwargs):
+        # Use a queue to communicate errors to parent process
+        self.queue = queue.Queue()
+        super().__init__(*args, **kwargs)
+        self._exception = None
+
+    def run(self):
+        try:
+            super().run()
+        except Exception:
+            self.queue.put(sys.exc_info())
+
+    @property
+    def child_exception(self):
+        if self._exception is None:
+            try:
+                exc = self.queue.get(block=False)
+                self._exception = exc
+            except queue.Empty:
+                self._exception = None
+        return self._exception

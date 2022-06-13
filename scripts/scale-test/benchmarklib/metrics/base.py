@@ -1,5 +1,6 @@
 import abc
 import csv
+import itertools
 from pathlib import Path
 from typing import Any, List
 
@@ -27,7 +28,7 @@ class ConstantField(Field):
 
 class VariableField(Field):
     """
-    To use when measuring values that change over the experiment
+    Use to measure a particular metric that change over the experiment
     time, such as memory or cpu usage of a specific process.
     """
 
@@ -37,6 +38,23 @@ class VariableField(Field):
 
     def collect(self):
         return self.callable()
+
+
+class ParametrizedField(Field):
+    """
+    Use to measure metrics that change over time across various nodes.
+    It will normalizes the resulting metric by node name
+    """
+
+    def __init__(self, name, param_name, params, callable):
+        self.name = name
+        self.param_name = param_name
+        self.params = params
+        self.callable = callable
+
+    def collect(self):
+        for param in self.params:
+            yield param, self.callable(param)
 
 
 class Metric:
@@ -58,25 +76,47 @@ class Metric:
     def add_field(self, field: Field):
         self.fields.append(field)
 
-    def collect_field_values(self) -> Sample:
-        sample = []
+    def collect_fields(self) -> List[Sample]:
+        def _insert_value(value, samples):
+            if samples == []:
+                samples.append([value])
+            else:
+                for sample in samples:
+                    sample.append(value)
+
+        samples = []
         for field in self.fields:
-            sample.append(field.collect())
-        return sample
+            if isinstance(field, ParametrizedField):
+                param_values = [[param, value] for param, value in field.collect()]
+                product = itertools.product(samples, param_values)
+                samples = [prev + new for prev, new in product]
+            else:
+                # Collect new field value and append
+                # it to the existing list of samples
+                value = field.collect()
+                _insert_value(value, samples)
+        return samples
 
     def clear(self):
         self.samples = []
 
     @property
     def field_names(self) -> List[str]:
-        return [field.name for field in self.fields]
+        names = []
+        for field in self.fields:
+            if isinstance(field, ParametrizedField):
+                names.append(field.param_name)
+                names.append(field.name)
+            else:
+                names.append(field.name)
+        return names
 
     def remove_field(self, field: Field) -> None:
         self.fields.remove(field)
 
     def sample(self):
-        sampled_values = self.collect_field_values()
-        self.samples.append(sampled_values)
+        sampled_values = self.collect_fields()
+        self.samples.extend(sampled_values)
 
     def dump(self, path: Path) -> None:
         metric_file = path / f"metric-{self.name}.csv"

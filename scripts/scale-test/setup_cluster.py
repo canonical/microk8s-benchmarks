@@ -2,8 +2,10 @@
 
 import json
 import logging
+import os
 import time
 from argparse import ArgumentParser, Namespace
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Optional
 
@@ -32,7 +34,10 @@ class JujuClusterSetup:
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
+        app: str = APP_NAME,
     ):
+        self.app = app
+        self.model = model
         self.juju = JujuSession(model=model, app=APP_NAME)
         self.total_nodes = total_nodes
         self.control_plane_nodes = control_plane_nodes
@@ -40,6 +45,7 @@ class JujuClusterSetup:
         self.http_proxy = http_proxy
         self.creds = creds
         self.units: List[Unit] = []
+        self.cluster_info = None
 
     def install_microk8s(
         self,
@@ -87,7 +93,7 @@ class JujuClusterSetup:
         logging.info("Rebooting all units")
         self.juju.run_in_all_units("reboot", timeout="10s")
 
-        logging.info(f"Waiting for {self.juju.model} model...")
+        logging.info(f"Waiting for {self.model} model...")
         self.juju.wait_for_model()
 
     def restart_containerd(self):
@@ -228,7 +234,8 @@ class JujuClusterSetup:
         master_node = units.pop(0)
         control_plane -= 1  # master is running control plane already
         cluster = ClusterInfo(
-            model=self.juju.model,
+            app=self.app,
+            model=self.model,
             master=master_node,
             control_plane=[master_node],
             workers=[],
@@ -262,18 +269,40 @@ class JujuClusterSetup:
         if replicas > 0:
             self.juju.add_units(replicas).check_returncode()
         self.juju.wait_for_model()
-        self.units = self.juju.get_units()
+        self.units = [Unit(**data) for data in self.juju.get_units()]
 
     def save_cluster_info(self, cluster: ClusterInfo):
         clusters_path = Path.cwd() / ".clusters"
         clusters_path.mkdir(parents=True, exist_ok=True)
 
         path = clusters_path / f"{cluster.model}.json"
+
         logging.info(f"Saving cluster info to {path}")
         with open(path, "w") as f:
             f.write(json.dumps(cluster.to_dict()))
 
+    def cleanup_cluster_info(self, cluster: ClusterInfo):
+        clusters_path = Path.cwd() / ".clusters"
+        path = clusters_path / f"{cluster.model}.json"
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            # Not there anymore
+            pass
+
+    @contextmanager
+    def temporary_setup(self):
+        try:
+            cluster_info = self.setup()
+            yield cluster_info
+        finally:
+            self.destroy()
+
     def setup(self) -> ClusterInfo:
+        worker_nodes = self.total_nodes - self.control_plane_nodes
+        logging.info(
+            f"Setting up a microk8s (channel={self.channel}) {self.total_nodes}-node cluster (cp={self.control_plane_nodes}, w={worker_nodes})"  # noqa
+        )
         self.deploy_units(self.total_nodes)
         self.install_microk8s(
             channel=self.channel,
@@ -282,7 +311,14 @@ class JujuClusterSetup:
         )
         cluster_info = self.form_cluster(self.control_plane_nodes)
         self.save_cluster_info(cluster_info)
+        self.cluster_info = cluster_info
         return cluster_info
+
+    def destroy(self):
+        logging.info(f"Destroying cluster in model {self.model}")
+        self.juju.destroy_model()
+        if self.cluster_info:
+            self.cleanup_cluster_info(self.cluster_info)
 
 
 def get_docker_credentials(
@@ -368,50 +404,30 @@ def configure_logging(debug: bool = False):
     logging.root.setLevel(level=level)
 
 
-def destroy_model(model: str):
-    logging.warning(f"Destroying model {model}")
-    JujuSession(model, APP_NAME).destroy_model()
-
-
-def setup_cluster(
-    model: str,
-    total_nodes: int,
-    control_plane: int,
-    channel: str,
-    http_proxy: Optional[str] = None,
-    creds: Optional[DockerCredentials] = None,
-) -> ClusterInfo:
-    mgr = JujuClusterSetup(
-        model,
-        total_nodes,
-        control_plane,
-        channel,
-        http_proxy=http_proxy,
-        creds=creds,
-    )
-    return mgr.setup()
-
-
 @timeit
 def main():
     args = parse_arguments()
+    error = False
     try:
-        setup_cluster(
-            args.model,
-            args.nodes,
-            args.control_plane,
-            args.channel,
+        mgr = JujuClusterSetup(
+            model=args.model,
+            total_nodes=args.nodes,
+            control_plane_nodes=args.control_plane,
+            channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
         )
+        mgr.setup()
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
+        error = True
     except Exception:
         logging.exception("Unexpected error")
+        error = True
         raise
     finally:
-        if args.destroy_on_error:
-            destroy_model(args.model)
+        if error and args.destroy_on_error:
+            mgr.destroy()
 
 
 if __name__ == "__main__":

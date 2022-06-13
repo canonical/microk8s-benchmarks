@@ -5,9 +5,10 @@ import sys
 from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
+import utils
 
 from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
+from benchmarklib.models import DockerCredentials
 from setup_cluster import (
     JujuClusterSetup,
     get_docker_credentials,
@@ -42,6 +43,15 @@ def test_destroys_model_on_error(_destroy_model, _deploy):
     _destroy_model.assert_called_once()
 
 
+@patch.object(sys, "argv", ["setup_cluster", "--destroy-on-error"])
+@patch("setup_cluster.JujuClusterSetup.setup")
+@patch("setup_cluster.JujuSession.destroy_model")
+def test_does_not_destroy_model_if_no_error(_destroy_model, _deploy):
+    main()
+
+    _destroy_model.assert_not_called()
+
+
 @patch("setup_cluster.JujuSession")
 def test_deploy_units_deploys_correct_number_of_replicas(_juju):
     units = 10
@@ -64,12 +74,9 @@ def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
     mgr.juju.add_units.assert_not_called()
 
 
-def test_save_cluster_info():
+def test_save_cluster_info(path_cwd_mock):
     with patch("setup_cluster.open", mock_open()) as _open:
-        unit = Unit(name="foo", ip="bar", instance_id="ba")
-        cluster = ClusterInfo(
-            model="foo", master=unit, control_plane=[unit], workers=[]
-        )
+        cluster = utils.get_cluster_info()
 
         mgr = juju_cluster_setup()
         mgr.save_cluster_info(cluster)
@@ -83,9 +90,9 @@ def test_save_cluster_info():
 def test_setup_cluster_joins_correct_number_of_worker_nodes(
     _join_nodes_to_cluster, _get_join_cluster_url, _all_nodes_joined
 ):
-    master_node = Unit(name="master", ip="masterip", instance_id="masterid")
-    other_node = Unit(name="node1", ip="node1ip", instance_id="node1id")
-    third_node = Unit(name="third", ip="thirdip", instance_id="thirdid")
+    master_node = utils.get_unit(name="master", ip="masterip", instance_id="masterid")
+    other_node = utils.get_unit(name="node1", ip="node1ip", instance_id="node1id")
+    third_node = utils.get_unit(name="third", ip="thirdip", instance_id="thirdid")
 
     # Try with 1/2 control plane nodes
     units = [master_node, other_node]
@@ -283,8 +290,10 @@ GET_NODES_JSON = {
 def test_all_nodes_joined_true(_juju_run):
     _juju_run.return_value.stdout = json.dumps(GET_NODES_JSON).encode()
 
-    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
+    units = [
+        utils.get_unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)
+    ]
+    cluster = utils.get_cluster_info(master=units[0], control_plane=units, workers=[])
 
     mgr = juju_cluster_setup()
 
@@ -298,8 +307,40 @@ def test_all_nodes_joined_false(_juju_run):
     test_get_nodes_json = json.dumps(get_nodes_false_output).encode()
     _juju_run.return_value.stdout = test_get_nodes_json
 
-    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
+    units = [
+        utils.get_unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)
+    ]
+    cluster = utils.get_cluster_info(master=units[0], control_plane=units, workers=[])
 
     mgr = juju_cluster_setup()
     assert mgr.all_nodes_joined(cluster) is False
+
+
+@patch("setup_cluster.JujuClusterSetup.destroy")
+@patch("setup_cluster.JujuClusterSetup.setup")
+def test_temporary_setup_destroys_cluster(_setup, _destroy):
+    mgr = juju_cluster_setup()
+
+    # Check when there is an exception in setup
+    mgr.setup.side_effect = ValueError("bar")
+    with pytest.raises(ValueError):
+        with mgr.temporary_setup():
+            pass
+
+    mgr.destroy.assert_called_once()
+    mgr.destroy.reset_mock()
+    mgr.setup.side_effect = None
+
+    # Check when there is an exception in code block
+    with pytest.raises(ValueError):
+        with mgr.temporary_setup():
+            raise ValueError("foo")
+
+    mgr.destroy.assert_called_once()
+    mgr.destroy.reset_mock()
+
+    # Check when no errors
+    with mgr.temporary_setup():
+        pass
+
+    mgr.destroy.assert_called_once()
