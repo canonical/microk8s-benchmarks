@@ -80,7 +80,7 @@ def all_nodes_joined_mock():
 
 @pytest.fixture()
 def setup_cluster_fixtures(
-    juju_status_mock, subprocess_run_mock, all_nodes_joined_mock
+    juju_status_mock, subprocess_run_mock, all_nodes_joined_mock, path_cwd_mock
 ):
     yield
 

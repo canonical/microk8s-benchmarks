@@ -270,6 +270,7 @@ class JujuClusterSetup:
         clusters_path.mkdir(parents=True, exist_ok=True)
 
         path = clusters_path / f"{cluster.model}.json"
+
         logging.info(f"Saving cluster info to {path}")
         with open(path, "w") as f:
             f.write(json.dumps(cluster.to_dict()))

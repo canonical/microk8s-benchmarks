@@ -73,7 +73,7 @@ def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
     mgr.juju.add_units.assert_not_called()
 
 
-def test_save_cluster_info():
+def test_save_cluster_info(path_cwd_mock):
     with patch("setup_cluster.open", mock_open()) as _open:
         unit = Unit(name="foo", ip="bar", instance_id="ba")
         cluster = ClusterInfo(

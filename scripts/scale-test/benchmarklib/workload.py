@@ -9,7 +9,7 @@ from .clients import kubectl
 
 
 class Workload:
-    def __init__(self, yaml: Path, duration: int, poll_period: int = 5):
+    def __init__(self, yaml: Path, duration: int, poll_period: int = 30):
         self.yaml = yaml
         self.duration = duration
         self.poll_period = poll_period
