@@ -9,18 +9,34 @@ from .clients import kubectl
 
 
 class Workload:
-    def __init__(self, yaml: Path, duration: int, poll_period: int = 30):
+    def __init__(
+        self,
+        yaml: Path,
+        duration: int,
+        name: Optional[str] = None,
+        poll_period: int = 30,
+    ):
         self.yaml = yaml
+        self._name = name
         self.duration = duration
         self.poll_period = poll_period
 
+    @property
+    def name(self):
+        if self._name is None:
+            if self.yaml:
+                self._name = self.yaml.name
+        return self._name
+
     def __str__(self) -> str:
-        return f"Workload[{self.yaml}]"
+        return f"Workload[{self.name}]"
 
     def apply(self, namespace: Optional[str] = None) -> None:
         kubectl.apply(self.yaml, namespace=namespace)
 
     def wait(self) -> None:
+        # TODO: move this logic to benchmarklib/experiment.py
+        # this doesn't belong here...
         start = time.time()
         while True:
             remaining = int(self.duration - (time.time() - start))
