@@ -8,7 +8,7 @@ from typing import Optional
 from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
-from setup_cluster import setup_cluster
+from setup_cluster import temporary_cluster
 
 CONTROL_PLANE = (1, 3, 5)
 TOTAL_NODES = (1, 10, 30, 50, 100)
@@ -20,7 +20,10 @@ def valid_cluster_shapes():
     product = itertools.product(CONTROL_PLANE, TOTAL_NODES)
     # Filter out shapes where cp < total nodes
     valid_shapes = [(cp, total) for (cp, total) in product if total >= cp]
-    return valid_shapes
+    # Sort by total nodes
+    # return sorted(valid_shapes, key=lambda x: x[1])
+    # Return only 4 of them for now, as vsphere is struggling with resources
+    return sorted(valid_shapes, key=lambda x: x[1])[:4]
 
 
 def get_docker_credentials() -> Optional[DockerCredentials]:
@@ -31,7 +34,7 @@ def get_docker_credentials() -> Optional[DockerCredentials]:
 
 
 def get_model_name(total_nodes, control_plane) -> str:
-    return f"cluster-{control_plane}-{total_nodes}"
+    return f"uk8s-benchmarks-cluster-{control_plane}-{total_nodes}"
 
 
 def doit(cp_nodes: int, total_nodes: int, semaphore: mp.BoundedSemaphore):
@@ -39,16 +42,21 @@ def doit(cp_nodes: int, total_nodes: int, semaphore: mp.BoundedSemaphore):
     Setup a microk8s cluster and run scale test experiment on it.
     """
     with semaphore:
-        cluster_info = setup_cluster(
-            get_model_name(total_nodes, cp_nodes),
-            total_nodes,
-            cp_nodes,
+        model = get_model_name(total_nodes, cp_nodes)
+
+        # Create a cluster and make sure it's deleted on finish
+        with temporary_cluster(
+            model=model,
+            total_nodes=total_nodes,
+            control_plane=cp_nodes,
             channel=CHANNEL,
             http_proxy=HTTP_PROXY,
             creds=get_docker_credentials(),
-        )
-        cluster = Microk8sCluster(cluster_info)
-        run_experiment(cluster)
+        ) as cluster_info:
+
+            # Run scale-test experiment on it
+            cluster = Microk8sCluster(cluster_info)
+            run_experiment(cluster)
 
 
 def parse_arguments():
@@ -86,7 +94,7 @@ class Process(mp.Process):
 
 class ChildProcessException(Exception):
     def __init__(self, child_exc):
-        self.child_exc
+        self.child_exc = child_exc
 
 
 def main(concurrency: int):

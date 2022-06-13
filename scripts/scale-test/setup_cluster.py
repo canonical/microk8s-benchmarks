@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from argparse import ArgumentParser, Namespace
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Optional
 
@@ -392,9 +393,33 @@ def setup_cluster(
     return mgr.setup()
 
 
+@contextmanager
+def temporary_cluster(
+    model: str,
+    total_nodes: int,
+    control_plane: int,
+    channel: str,
+    http_proxy: Optional[str] = None,
+    creds: Optional[DockerCredentials] = None,
+):
+    cluster_info = setup_cluster(
+        model=model,
+        total_nodes=total_nodes,
+        control_plane=control_plane,
+        channel=channel,
+        http_proxy=http_proxy,
+        creds=creds,
+    )
+
+    yield cluster_info
+
+    destroy_model(model)
+
+
 @timeit
 def main():
     args = parse_arguments()
+    error = False
     try:
         setup_cluster(
             args.model,
@@ -406,11 +431,13 @@ def main():
         )
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
+        error = True
     except Exception:
         logging.exception("Unexpected error")
+        error = True
         raise
     finally:
-        if args.destroy_on_error:
+        if error and args.destroy_on_error:
             destroy_model(args.model)
 
 

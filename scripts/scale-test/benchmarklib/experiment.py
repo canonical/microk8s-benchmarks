@@ -86,9 +86,11 @@ class Experiment:
     @contextmanager
     def short_lived_namespace(self):
         """
-        We deploy workloads on a new temporary namespace to that it is easier to cleanup whatever was deployed.
+        We deploy workloads on a new temporary namespace so that it is easier
+        to cleanup whatever was deployed.
         """
         # TODO: Verify namespace is conformant to: [a-z0-9]([-a-z0-9]*[a-z0-9])?'
+        # and if not, raise an error.
         namespace = self.name.replace("_", "-")
         self.cluster.create_namespace(namespace)
 
