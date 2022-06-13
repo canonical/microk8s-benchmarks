@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import logging
 import multiprocessing as mp
 import traceback
 from typing import Optional
@@ -107,7 +108,7 @@ def main(concurrency: int):
 
             if proc.exception:
                 error, traceback = proc.exception
-                print(traceback)
+                logging.exception(f"Error on subprocess. {traceback}")
                 raise ChildProcessException(error)
     except KeyboardInterrupt:
         for proc in processes:

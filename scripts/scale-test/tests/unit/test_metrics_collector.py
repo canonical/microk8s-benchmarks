@@ -72,3 +72,22 @@ def test_context_manager_dumps_metrics_on_exception(temp_dir):
         lines = contents.split()
         assert len(lines) >= 1
         assert lines[0] == "cluster_size,memory_usage"
+
+
+def test_exception_in_thread_is_handled():
+    class FailingMetric(Metric):
+        def __init__(self):
+            super().__init__("I will fail")
+            self.add_field(VariableField("fail", self.get_value))
+
+        def get_value(self):
+            raise KeyError("some error")
+
+    metric = FailingMetric()
+    collector = MetricsCollector(
+        metrics=[metric],
+        poll_period=0,
+    )
+    with pytest.raises(KeyError):
+        with collector:
+            pass
