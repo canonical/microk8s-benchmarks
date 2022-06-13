@@ -8,7 +8,7 @@ from typing import Optional
 from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
-from setup_cluster import temporary_cluster
+from setup_cluster import JujuClusterSetup
 
 CONTROL_PLANE = (1, 3, 5)
 TOTAL_NODES = (1, 10, 30, 50, 100)
@@ -44,15 +44,16 @@ def doit(cp_nodes: int, total_nodes: int, semaphore: mp.BoundedSemaphore):
     with semaphore:
         model = get_model_name(total_nodes, cp_nodes)
 
-        # Create a cluster and make sure it's deleted on finish
-        with temporary_cluster(
+        # Create a cluster via Juju and make sure it's deleted on finish
+        mgr = JujuClusterSetup(
             model=model,
             total_nodes=total_nodes,
-            control_plane=cp_nodes,
+            control_plane_nodes=cp_nodes,
             channel=CHANNEL,
             http_proxy=HTTP_PROXY,
             creds=get_docker_credentials(),
-        ) as cluster_info:
+        )
+        with mgr.temporary_setup() as cluster_info:
 
             # Run scale-test experiment on it
             cluster = Microk8sCluster(cluster_info)

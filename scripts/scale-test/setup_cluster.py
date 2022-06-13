@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import time
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
@@ -34,6 +35,7 @@ class JujuClusterSetup:
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
     ):
+        self.model = model
         self.juju = JujuSession(model=model, app=APP_NAME)
         self.total_nodes = total_nodes
         self.control_plane_nodes = control_plane_nodes
@@ -88,7 +90,7 @@ class JujuClusterSetup:
         logging.info("Rebooting all units")
         self.juju.run_in_all_units("reboot", timeout="10s")
 
-        logging.info(f"Waiting for {self.juju.model} model...")
+        logging.info(f"Waiting for {self.model} model...")
         self.juju.wait_for_model()
 
     def restart_containerd(self):
@@ -229,7 +231,7 @@ class JujuClusterSetup:
         master_node = units.pop(0)
         control_plane -= 1  # master is running control plane already
         cluster = ClusterInfo(
-            model=self.juju.model,
+            model=self.model,
             master=master_node,
             control_plane=[master_node],
             workers=[],
@@ -275,6 +277,23 @@ class JujuClusterSetup:
         with open(path, "w") as f:
             f.write(json.dumps(cluster.to_dict()))
 
+    def cleanup_cluster_info(self, cluster: ClusterInfo):
+        clusters_path = Path.cwd() / ".clusters"
+        path = clusters_path / f"{cluster.model}.json"
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            # Not there anymore
+            pass
+
+    @contextmanager
+    def temporary_setup(self):
+        cluster_info = self.setup()
+
+        yield cluster_info
+
+        self.destroy()
+
     def setup(self) -> ClusterInfo:
         self.deploy_units(self.total_nodes)
         self.install_microk8s(
@@ -284,7 +303,13 @@ class JujuClusterSetup:
         )
         cluster_info = self.form_cluster(self.control_plane_nodes)
         self.save_cluster_info(cluster_info)
+        self.cluster_info = cluster_info
         return cluster_info
+
+    def destroy(self):
+        logging.warning(f"Destroying cluster {self.model}")
+        self.juju.destroy_model()
+        self.cleanup_cluster_info(self.cluster_info)
 
 
 def get_docker_credentials(
@@ -370,66 +395,20 @@ def configure_logging(debug: bool = False):
     logging.root.setLevel(level=level)
 
 
-def destroy_model(model: str):
-    logging.warning(f"Destroying model {model}")
-    JujuSession(model, APP_NAME).destroy_model()
-
-
-def setup_cluster(
-    model: str,
-    total_nodes: int,
-    control_plane: int,
-    channel: str,
-    http_proxy: Optional[str] = None,
-    creds: Optional[DockerCredentials] = None,
-) -> ClusterInfo:
-    mgr = JujuClusterSetup(
-        model,
-        total_nodes,
-        control_plane,
-        channel,
-        http_proxy=http_proxy,
-        creds=creds,
-    )
-    return mgr.setup()
-
-
-@contextmanager
-def temporary_cluster(
-    model: str,
-    total_nodes: int,
-    control_plane: int,
-    channel: str,
-    http_proxy: Optional[str] = None,
-    creds: Optional[DockerCredentials] = None,
-):
-    cluster_info = setup_cluster(
-        model=model,
-        total_nodes=total_nodes,
-        control_plane=control_plane,
-        channel=channel,
-        http_proxy=http_proxy,
-        creds=creds,
-    )
-
-    yield cluster_info
-
-    destroy_model(model)
-
-
 @timeit
 def main():
     args = parse_arguments()
     error = False
     try:
-        setup_cluster(
-            args.model,
-            args.nodes,
-            args.control_plane,
-            args.channel,
+        mgr = JujuClusterSetup(
+            model=args.model,
+            total_nodes=args.nodes,
+            control_plane_nodes=args.control_plane,
+            channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
         )
+        mgr.setup()
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
         error = True
@@ -439,7 +418,7 @@ def main():
         raise
     finally:
         if error and args.destroy_on_error:
-            destroy_model(args.model)
+            mgr.destroy()
 
 
 if __name__ == "__main__":
