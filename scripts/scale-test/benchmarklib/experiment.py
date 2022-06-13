@@ -78,7 +78,6 @@ class Experiment:
             with WorkloadMetrics(
                 workload=workload,
                 metrics=self.get_metrics_for_workload(workload),
-                poll_period=10,
                 store_at=self.store_metrics_at,
             ):
                 workload.wait()
@@ -124,11 +123,10 @@ class WorkloadMetrics(MetricsCollector):
         workload: Workload,
         metrics: List[Metric],
         store_at: Path,
-        poll_period: int = 10,
     ):
         self.workload = workload
         self.workload_field = ConstantField("workload", self.workload_id)
-        super().__init__(metrics=metrics, store_at=store_at, poll_period=poll_period)
+        super().__init__(metrics=metrics, store_at=store_at)
 
     @property
     def workload_id(self):

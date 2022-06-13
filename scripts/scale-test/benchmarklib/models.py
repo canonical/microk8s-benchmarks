@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -45,3 +46,10 @@ class ClusterInfo:
 class DockerCredentials:
     username: str
     password: str
+
+    @classmethod
+    def from_env(klass):
+        return klass(
+            username=os.environ["DOCKER_USERNAME"],
+            password=os.environ["DOCKER_PASSWORD"],
+        )
