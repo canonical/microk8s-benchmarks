@@ -2,10 +2,12 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from benchmarklib.metrics.base import Metric
 from benchmarklib.utils import pp_time
+
+DEFAULT_POLL_PERIOD = 10
 
 
 class MetricsCollector:
@@ -17,11 +19,11 @@ class MetricsCollector:
         self,
         metrics: List[Metric],
         store_at: Path,
-        poll_period: int = 10,
+        poll_period: Optional[int] = None,
     ):
         self.metrics = metrics
         self.store_at = store_at
-        self.poll_period = poll_period
+        self.poll_period = poll_period or DEFAULT_POLL_PERIOD
         self._started: bool = False
         self.thread = None
 
