@@ -97,16 +97,16 @@ def main(concurrency: int):
     processes = []
 
     for (cp_nodes, total_nodes) in valid_cluster_shapes():
-        p = Process(target=doit, args=(cp_nodes, total_nodes, semaphore))
-        processes.append(p)
-        p.start()
+        proc = Process(target=doit, args=(cp_nodes, total_nodes, semaphore))
+        processes.append(proc)
+        proc.start()
 
     try:
         for proc in processes:
             proc.join()
 
             if proc.exception:
-                error, traceback = p.exception
+                error, traceback = proc.exception
                 print(traceback)
                 raise ChildProcessException(error)
     except KeyboardInterrupt:
