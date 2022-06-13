@@ -24,8 +24,8 @@ class Workload:
     @property
     def name(self):
         if self._name is None:
-            if self.yaml:
-                self._name = self.yaml.name
+            # Infer from yaml name
+            self._name = self.yaml.name
         return self._name
 
     def __str__(self) -> str:
