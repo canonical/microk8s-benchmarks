@@ -288,13 +288,17 @@ class JujuClusterSetup:
 
     @contextmanager
     def temporary_setup(self):
-        cluster_info = self.setup()
         try:
+            cluster_info = self.setup()
             yield cluster_info
         finally:
             self.destroy()
 
     def setup(self) -> ClusterInfo:
+        worker_nodes = self.total_nodes - self.control_plane_nodes
+        logging.info(
+            f"Setting up a microk8s ({self.channel}) cluster of {self.total_nodes} nodes ({self.control_plane_nodes}/{worker_nodes})"  # noqa
+        )
         self.deploy_units(self.total_nodes)
         self.install_microk8s(
             channel=self.channel,
@@ -307,7 +311,7 @@ class JujuClusterSetup:
         return cluster_info
 
     def destroy(self):
-        logging.warning(f"Destroying cluster {self.model}")
+        logging.info(f"Destroying cluster in model {self.model}")
         self.juju.destroy_model()
         self.cleanup_cluster_info(self.cluster_info)
 

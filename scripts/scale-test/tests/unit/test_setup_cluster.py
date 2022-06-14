@@ -319,7 +319,17 @@ def test_all_nodes_joined_false(_juju_run):
 def test_temporary_setup_destroys_cluster(_setup, _destroy):
     mgr = juju_cluster_setup()
 
-    # Check when there is an exception
+    # Check when there is an exception in setup
+    mgr.setup.side_effect = ValueError("bar")
+    with pytest.raises(ValueError):
+        with mgr.temporary_setup():
+            pass
+
+    mgr.destroy.assert_called_once()
+    mgr.destroy.reset_mock()
+    mgr.setup.side_effect = None
+
+    # Check when there is an exception in code block
     with pytest.raises(ValueError):
         with mgr.temporary_setup():
             raise ValueError("foo")
