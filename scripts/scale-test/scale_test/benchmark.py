@@ -22,9 +22,7 @@ def valid_cluster_shapes():
     # Filter out shapes where cp < total nodes
     valid_shapes = [(cp, total) for (cp, total) in product if total >= cp]
     # Sort by total nodes
-    # return sorted(valid_shapes, key=lambda x: x[1])
-    # Return only 4 of them for now, as vsphere is struggling with resources
-    return sorted(valid_shapes, key=lambda x: x[1])[:4]
+    return sorted(valid_shapes, key=lambda x: x[1])
 
 
 def get_docker_credentials() -> Optional[DockerCredentials]:

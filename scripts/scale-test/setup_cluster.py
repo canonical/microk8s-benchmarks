@@ -297,7 +297,7 @@ class JujuClusterSetup:
     def setup(self) -> ClusterInfo:
         worker_nodes = self.total_nodes - self.control_plane_nodes
         logging.info(
-            f"Setting up a microk8s ({self.channel}) cluster of {self.total_nodes} nodes ({self.control_plane_nodes}/{worker_nodes})"  # noqa
+            f"Setting up a microk8s (channel={self.channel}) {self.total_nodes}-node cluster (cp={self.control_plane_nodes}, w={worker_nodes})"  # noqa
         )
         self.deploy_units(self.total_nodes)
         self.install_microk8s(
