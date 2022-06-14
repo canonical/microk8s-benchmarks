@@ -22,9 +22,10 @@ def test_dqlite_memory_metric():
     cluster.run_in_unit.return_value = resp_mock
 
     metric = DqliteMemory(cluster)
+    assert metric.field_names == ["total_nodes", "control_plane", "node", "memory"]
     metric.sample()
 
-    assert metric.samples == [[2, 2, 3, 3]]
+    assert metric.samples == [[2, 2, TEST_UNIT_1.name, 3], [2, 2, TEST_UNIT_2.name, 3]]
 
 
 def test_dqlite_cpu_metric():
@@ -36,6 +37,10 @@ def test_dqlite_cpu_metric():
     cluster.run_in_unit.return_value = resp_mock
 
     metric = DqliteCPU(cluster)
+    assert metric.field_names == ["total_nodes", "control_plane", "node", "cpu"]
     metric.sample()
 
-    assert metric.samples == [[2, 2, 5.0, 5.0]]
+    assert metric.samples == [
+        [2, 2, TEST_UNIT_1.name, 5.0],
+        [2, 2, TEST_UNIT_2.name, 5.0],
+    ]

@@ -1,5 +1,6 @@
 import abc
 import csv
+import itertools
 from pathlib import Path
 from typing import Any, List
 
@@ -27,7 +28,7 @@ class ConstantField(Field):
 
 class VariableField(Field):
     """
-    To use when measuring values that change over the experiment
+    Use to measure a particular metric that change over the experiment
     time, such as memory or cpu usage of a specific process.
     """
 
@@ -37,6 +38,22 @@ class VariableField(Field):
 
     def collect(self):
         return self.callable()
+
+
+class NodeAwareField(Field):
+    """
+    Use to measure metrics that change over time across various nodes.
+    It will normalizes the resulting metric by node name
+    """
+
+    def __init__(self, name, nodes, callable):
+        self.name = name
+        self.nodes = nodes
+        self.callable = callable
+
+    def collect(self):
+        for node in self.nodes:
+            yield node.name, self.callable(node)
 
 
 class Metric:
@@ -56,27 +73,60 @@ class Metric:
         self.samples: List[Sample] = []
 
     def add_field(self, field: Field):
+        self.check_can_add_field(field)
         self.fields.append(field)
 
-    def collect_field_values(self) -> Sample:
-        sample = []
+    def check_can_add_field(self, field):
+        if not isinstance(field, NodeAwareField):
+            return
+
+        # Check if there is already a NodeAwareField added
+        if any([isinstance(f, NodeAwareField) for f in self.fields]):
+            raise ValueError("Multiple NodeAwareField fields is not supported")
+
+    def collect_fields(self) -> List[Sample]:
+        def _insert_value(value, samples):
+            if samples == []:
+                samples.append([value])
+            else:
+                for sample in samples:
+                    sample.append(value)
+
+        samples = []
+
         for field in self.fields:
-            sample.append(field.collect())
-        return sample
+            if isinstance(field, NodeAwareField):
+                node_values = [[node, value] for node, value in field.collect()]
+                product = itertools.product(samples, node_values)
+                samples = [prev + new for prev, new in product]
+            else:
+                # Collect new field value and append
+                # it to the existing list of samples
+                value = field.collect()
+                _insert_value(value, samples)
+
+        return samples
 
     def clear(self):
         self.samples = []
 
     @property
     def field_names(self) -> List[str]:
-        return [field.name for field in self.fields]
+        names = []
+        for field in self.fields:
+            if isinstance(field, NodeAwareField):
+                names.append("node")
+                names.append(field.name)
+            else:
+                names.append(field.name)
+        return names
 
     def remove_field(self, field: Field) -> None:
         self.fields.remove(field)
 
     def sample(self):
-        sampled_values = self.collect_field_values()
-        self.samples.append(sampled_values)
+        sampled_values = self.collect_fields()
+        self.samples.extend(sampled_values)
 
     def dump(self, path: Path) -> None:
         metric_file = path / f"metric-{self.name}.csv"
