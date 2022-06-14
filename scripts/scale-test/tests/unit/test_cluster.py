@@ -6,7 +6,7 @@ from unittest.mock import mock_open, patch
 import pytest
 
 from benchmarklib.clients import juju
-from benchmarklib.cluster import Microk8sCluster
+from benchmarklib.cluster import ClusterCommandError, Microk8sCluster
 from benchmarklib.models import ClusterInfo, Unit
 
 TEST_UNIT = Unit(name="foo", ip="bar", instance_id="ba")
@@ -33,9 +33,13 @@ def test_run_in_unit_logs_process_error(caplog):
         _juju_run.return_value.check_returncode.side_effect = error
         cluster = Microk8sCluster(info=TEST_CLUSTER_INFO)
 
-        with pytest.raises(CalledProcessError):
+        with pytest.raises(ClusterCommandError) as exc:
 
             cluster.run_in_unit(cluster.info.master, "blah")
+
+        assert exc.value.command == "blah"
+        assert exc.value.stdout
+        assert exc.value.stderr
 
         assert caplog.records[0].levelno == logging.ERROR
         assert "Error running blah on foo" in caplog.records[0].message

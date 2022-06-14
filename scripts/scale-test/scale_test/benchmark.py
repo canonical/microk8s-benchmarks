@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import itertools
 import logging
 import multiprocessing as mp
@@ -37,11 +38,19 @@ def get_model_name(total_nodes, control_plane) -> str:
     return f"uk8s-benchmarks-cluster-{control_plane}-{total_nodes}"
 
 
-def doit(cp_nodes: int, total_nodes: int, semaphore: mp.BoundedSemaphore):
+def doit(
+    cp_nodes: int, total_nodes: int, semaphore: Optional[mp.BoundedSemaphore] = None
+):
     """
     Setup a microk8s cluster and run scale test experiment on it.
     """
-    with semaphore:
+    # Use semaphore only if provided
+    if semaphore:
+        cm = semaphore
+    else:
+        cm = contextlib.nullcontext()
+
+    with cm:
         model = get_model_name(total_nodes, cp_nodes)
 
         # Create a cluster via Juju and make sure it's deleted on finish
@@ -98,7 +107,12 @@ class ChildProcessException(Exception):
         self.child_exc = child_exc
 
 
-def main(concurrency: int):
+def benchmark_serial():
+    for (cp_nodes, total_nodes) in valid_cluster_shapes():
+        doit(cp_nodes, total_nodes)
+
+
+def benchmark_concurrent(concurrency: int):
     """
     Will run various processes in parallel. Each process will setup a
     cluster in a different juju model and then run the scale test on it.
@@ -122,6 +136,13 @@ def main(concurrency: int):
     except KeyboardInterrupt:
         for proc in processes:
             proc.kill()
+
+
+def main(concurrency: int):
+    if concurrency >= 1:
+        benchmark_serial()
+    else:
+        benchmark_concurrent(concurrency)
 
 
 if __name__ == "__main__":

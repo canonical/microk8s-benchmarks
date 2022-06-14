@@ -289,10 +289,10 @@ class JujuClusterSetup:
     @contextmanager
     def temporary_setup(self):
         cluster_info = self.setup()
-
-        yield cluster_info
-
-        self.destroy()
+        try:
+            yield cluster_info
+        finally:
+            self.destroy()
 
     def setup(self) -> ClusterInfo:
         self.deploy_units(self.total_nodes)

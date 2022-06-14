@@ -8,6 +8,13 @@ from benchmarklib.clients import juju, kubectl
 from benchmarklib.models import ClusterInfo, Unit
 
 
+class ClusterCommandError(Exception):
+    def __init__(self, command, stdout: str, stderr: str):
+        self.command = command
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 class Microk8sCluster:
     """
     Handles interactions to the Microk8s cluster
@@ -34,10 +41,11 @@ class Microk8sCluster:
         try:
             resp.check_returncode()
             return resp
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
             stderr = resp.stderr.decode().strip()
+            stdout = resp.stdout.decode()
             logging.error(f"Error running {command} on {unit.name}: {stderr}")
-            raise
+            raise ClusterCommandError(command, stdout, stderr) from err
 
     def run_in_master_node(self, command: str):
         return self.run_in_unit(self.get_master_node(), command)
