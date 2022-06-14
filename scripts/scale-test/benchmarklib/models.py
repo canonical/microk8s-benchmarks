@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -53,3 +53,24 @@ class DockerCredentials:
             username=os.environ["DOCKER_USERNAME"],
             password=os.environ["DOCKER_PASSWORD"],
         )
+
+
+@dataclass
+class Addon:
+    name: str
+    enable_arg: Optional[str] = None
+    disable_arg: Optional[str] = None
+
+    @property
+    def enable(self) -> str:
+        enable_str = self.name
+        if self.enable_arg:
+            enable_str = f"{enable_str}:{self.enable_arg}"
+        return enable_str
+
+    @property
+    def disable(self) -> str:
+        disable_str = self.name
+        if self.disable_arg:
+            disable_str = f"{disable_str}:{self.disable_arg}"
+        return disable_str
