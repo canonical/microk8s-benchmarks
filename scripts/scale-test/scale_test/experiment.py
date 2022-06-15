@@ -6,6 +6,7 @@ from pathlib import Path
 
 from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.experiment import Experiment
+from benchmarklib.models import Addon
 from benchmarklib.workload import Workload
 from scale_test.metrics import DqliteCPU, DqliteMemory
 
@@ -34,6 +35,13 @@ def configure_logging(args: argparse.Namespace) -> None:
         logging.root.setLevel(logging.DEBUG)
 
 
+def get_cluster_dns_server(cluster: Microk8sCluster) -> str:
+    logging.info("Getting DNS server from cluster")
+    command = "resolvectl status | grep 'Current DNS Server' | awk '{print $4}'"
+    resp = cluster.run_in_master_node(command)
+    return resp.stdout.decode().strip()
+
+
 def main():
     args = parse_args()
     configure_logging(args)
@@ -41,11 +49,17 @@ def main():
     # Setup cluster manager
     cluster = Microk8sCluster.from_file(Path(args.cluster_file))
 
+    # Addons
+    dns_server = get_cluster_dns_server(cluster)
+    dns = Addon(name="dns", enable_arg=dns_server)
+    hostpath = Addon(name="hostpath-storage", disable_arg="destroy-storage")
+    prometheus = Addon(name="prometheus")
+
     # Experiment
     scaletest = Experiment(
         "scale-test",
         cluster=cluster,
-        required_addons=["dns", "hostpath-storage", "prometheus"],
+        required_addons=[dns, hostpath, prometheus],
     )
 
     # Workloads

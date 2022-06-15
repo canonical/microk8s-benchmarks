@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.metrics.base import ConstantField, Metric
 from benchmarklib.metrics.collector import MetricsCollector
+from benchmarklib.models import Addon
 from benchmarklib.workload import Workload
 
 CURRENT_PATH = Path.cwd()
@@ -25,7 +26,7 @@ class Experiment:
         self,
         name: str,
         cluster: Microk8sCluster,
-        required_addons: Optional[List[str]] = None,
+        required_addons: Optional[List[Addon]] = None,
     ):
         self.name = name
         self.required_addons = required_addons or []
@@ -98,13 +99,14 @@ class Experiment:
     def bootstrap(self):
         logging.info("Bootstrapping cluster")
         if len(self.required_addons) > 0:
-            self.cluster.enable(self.required_addons)
+            addons = [addon.enable for addon in self.required_addons]
+            self.cluster.enable(addons)
 
     def teardown(self):
         logging.info("Cluster teardown")
         if len(self.required_addons) > 0:
             for addon in self.required_addons:
-                self.cluster.disable([addon])
+                self.cluster.disable([addon.disable])
 
     def run(self):
         with safe_kubeconfig(self.cluster):
