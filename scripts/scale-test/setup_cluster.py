@@ -32,7 +32,10 @@ class JujuClusterSetup:
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
+        app: str = APP_NAME,
     ):
+        self.app = app
+        self.model = model
         self.juju = JujuSession(model=model, app=APP_NAME)
         self.total_nodes = total_nodes
         self.control_plane_nodes = control_plane_nodes
@@ -40,6 +43,7 @@ class JujuClusterSetup:
         self.http_proxy = http_proxy
         self.creds = creds
         self.units: List[Unit] = []
+        self.cluster_info = None
 
     def install_microk8s(
         self,
@@ -87,7 +91,7 @@ class JujuClusterSetup:
         logging.info("Rebooting all units")
         self.juju.run_in_all_units("reboot", timeout="10s")
 
-        logging.info(f"Waiting for {self.juju.model} model...")
+        logging.info(f"Waiting for {self.model} model...")
         self.juju.wait_for_model()
 
     def restart_containerd(self):
@@ -228,7 +232,8 @@ class JujuClusterSetup:
         master_node = units.pop(0)
         control_plane -= 1  # master is running control plane already
         cluster = ClusterInfo(
-            model=self.juju.model,
+            app=self.app,
+            model=self.model,
             master=master_node,
             control_plane=[master_node],
             workers=[],
@@ -262,7 +267,7 @@ class JujuClusterSetup:
         if replicas > 0:
             self.juju.add_units(replicas).check_returncode()
         self.juju.wait_for_model()
-        self.units = self.juju.get_units()
+        self.units = [Unit(**data) for data in self.juju.get_units()]
 
     def save_cluster_info(self, cluster: ClusterInfo):
         clusters_path = Path.cwd() / ".clusters"
@@ -274,6 +279,10 @@ class JujuClusterSetup:
             f.write(json.dumps(cluster.to_dict()))
 
     def setup(self) -> ClusterInfo:
+        worker_nodes = self.total_nodes - self.control_plane_nodes
+        logging.info(
+            f"Setting up a microk8s (channel={self.channel}) {self.total_nodes}-node cluster (cp={self.control_plane_nodes}, w={worker_nodes})"  # noqa
+        )
         self.deploy_units(self.total_nodes)
         self.install_microk8s(
             channel=self.channel,
@@ -282,6 +291,7 @@ class JujuClusterSetup:
         )
         cluster_info = self.form_cluster(self.control_plane_nodes)
         self.save_cluster_info(cluster_info)
+        self.cluster_info = cluster_info
         return cluster_info
 
 

@@ -1,12 +1,12 @@
 from unittest.mock import Mock
 
-from benchmarklib.models import ClusterInfo, Unit
+from utils import get_cluster_info, get_unit
+
 from scale_test.metrics import DqliteCPU, DqliteMemory
 
-TEST_UNIT_1 = Unit(name="unit_1", ip="bar", instance_id="ba")
-TEST_UNIT_2 = Unit(name="unit_2", ip="bar", instance_id="ba")
-TEST_CLUSTER_INFO = ClusterInfo(
-    model="test",
+TEST_UNIT_1 = get_unit()
+TEST_UNIT_2 = get_unit()
+TEST_CLUSTER_INFO = get_cluster_info(
     master=TEST_UNIT_1,
     control_plane=[TEST_UNIT_1, TEST_UNIT_2],
     workers=[],
