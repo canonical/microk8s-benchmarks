@@ -22,8 +22,8 @@ def pp_time(elapsed: int) -> str:
     ]:
         if unit <= 0:
             continue
-        final += f"{unit}{unit_name}"
-    return final
+        final += f"{unit:.0f}{unit_name}"
+    return final or "0s"
 
 
 class timeit:

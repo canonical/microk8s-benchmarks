@@ -5,9 +5,10 @@ import sys
 from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
+from utils import get_cluster_info, get_unit
 
 from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
-from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
+from benchmarklib.models import DockerCredentials
 from setup_cluster import (
     JujuClusterSetup,
     get_docker_credentials,
@@ -66,10 +67,7 @@ def test_deploy_units_skips_add_unit_when_single_node_cluster(_juju):
 
 def test_save_cluster_info():
     with patch("setup_cluster.open", mock_open()) as _open:
-        unit = Unit(name="foo", ip="bar", instance_id="ba")
-        cluster = ClusterInfo(
-            model="foo", master=unit, control_plane=[unit], workers=[]
-        )
+        cluster = get_cluster_info()
 
         mgr = juju_cluster_setup()
         mgr.save_cluster_info(cluster)
@@ -83,9 +81,9 @@ def test_save_cluster_info():
 def test_setup_cluster_joins_correct_number_of_worker_nodes(
     _join_nodes_to_cluster, _get_join_cluster_url, _all_nodes_joined
 ):
-    master_node = Unit(name="master", ip="masterip", instance_id="masterid")
-    other_node = Unit(name="node1", ip="node1ip", instance_id="node1id")
-    third_node = Unit(name="third", ip="thirdip", instance_id="thirdid")
+    master_node = get_unit()
+    other_node = get_unit()
+    third_node = get_unit()
 
     # Try with 1/2 control plane nodes
     units = [master_node, other_node]
@@ -99,7 +97,6 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
     _join_nodes_to_cluster.assert_called_once_with(
         [other_node], join_url, as_worker=True
     )
-    assert cluster.model == "foo"
     assert cluster.master == master_node
     assert cluster.control_plane == [master_node]
     assert cluster.workers == [other_node]
@@ -283,8 +280,10 @@ GET_NODES_JSON = {
 def test_all_nodes_joined_true(_juju_run):
     _juju_run.return_value.stdout = json.dumps(GET_NODES_JSON).encode()
 
-    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
+    units = [get_unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
+    cluster = get_cluster_info(
+        model="foo", master=units[0], control_plane=units, workers=[]
+    )
 
     mgr = juju_cluster_setup()
 
@@ -298,8 +297,10 @@ def test_all_nodes_joined_false(_juju_run):
     test_get_nodes_json = json.dumps(get_nodes_false_output).encode()
     _juju_run.return_value.stdout = test_get_nodes_json
 
-    units = [Unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
-    cluster = ClusterInfo(model="foo", master=units[0], control_plane=units, workers=[])
+    units = [get_unit(instance_id=f"node-{i}", ip="foo", name="bar") for i in range(5)]
+    cluster = get_cluster_info(
+        model="foo", master=units[0], control_plane=units, workers=[]
+    )
 
     mgr = juju_cluster_setup()
     assert mgr.all_nodes_joined(cluster) is False

@@ -2,10 +2,18 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from benchmarklib.clients import juju, kubectl
+from benchmarklib.clients import kubectl
+from benchmarklib.clients.juju import JujuSession
 from benchmarklib.models import ClusterInfo, Unit
+
+
+class ClusterCommandError(Exception):
+    def __init__(self, command, stdout: str, stderr: str):
+        self.command = command
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 class Microk8sCluster:
@@ -15,6 +23,7 @@ class Microk8sCluster:
 
     def __init__(self, info: Optional[ClusterInfo] = None):
         self.info = info
+        self.juju = JujuSession(model=info.model, app=info.app)
 
     @classmethod
     def from_file(klass, cluster_file: Path):
@@ -29,15 +38,19 @@ class Microk8sCluster:
     def get_master_node(self) -> Unit:
         return self.info.master
 
-    def run_in_unit(self, unit: Unit, command: str):
-        resp = juju.run(command, unit=unit.name)
+    def run_in_unit(self, unit: Union[Unit, str], command: str):
+        unit_name = unit
+        if isinstance(unit, Unit):
+            unit_name = unit.name
+        resp = self.juju.run_in_unit(command, unit=unit_name)
         try:
             resp.check_returncode()
             return resp
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
             stderr = resp.stderr.decode().strip()
-            logging.error(f"Error running {command} on {unit.name}: {stderr}")
-            raise
+            stdout = resp.stdout.decode()
+            logging.error(f"Error running {command} on {unit_name}: {stderr}")
+            raise ClusterCommandError(command, stdout, stderr) from err
 
     def run_in_master_node(self, command: str):
         return self.run_in_unit(self.get_master_node(), command)
