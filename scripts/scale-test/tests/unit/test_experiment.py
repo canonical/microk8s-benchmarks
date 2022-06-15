@@ -1,15 +1,16 @@
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-from benchmarklib.experiment import Experiment, safe_kubeconfig
+from benchmarklib.experiment import Experiment, fetch_kubeconfig
 
 
-@patch("benchmarklib.experiment.safe_kubeconfig", autospec=True)
+@patch("benchmarklib.experiment.fetch_kubeconfig", autospec=True)
 @patch("benchmarklib.experiment.Experiment.teardown")
-def test_run_calls_teardown_on_graceful_exit(_teardown, _safe_kubeconfig):
+def test_run_calls_teardown_on_graceful_exit(_teardown, _fetch_kubeconfig):
     exp = Experiment("foo", None)
 
     exp.run()
@@ -17,10 +18,10 @@ def test_run_calls_teardown_on_graceful_exit(_teardown, _safe_kubeconfig):
     _teardown.assert_called_once()
 
 
-@patch("benchmarklib.experiment.safe_kubeconfig", autospec=True)
+@patch("benchmarklib.experiment.fetch_kubeconfig", autospec=True)
 @patch("benchmarklib.experiment.Experiment.teardown")
 @patch("benchmarklib.experiment.Experiment.start")
-def test_run_calls_teardown_on_exception(_start, _teardown, _safe_kubeconfig):
+def test_run_calls_teardown_on_exception(_start, _teardown, _fetch_kubeconfig):
     exp = Experiment("foo", None)
 
     # Unhandled exception
@@ -80,21 +81,32 @@ def fake_kube_config():
         tmp.file.flush()
         yield Path(tmp.name)
 
-        tmp.close()
+        try:
+            tmp.close()
+        except FileNotFoundError:
+            pass
 
 
-def test_safe_kubeconfig(fake_kube_config):
+def test_fetch_kubeconfig(fake_kube_config):
+    # Check that config file is computed correctly from model
+    cluster = Mock(info=Mock(model="foo-model"))
+    fetch = fetch_kubeconfig(cluster)
+    assert str(fetch.config_file).endswith(".kube/config_foo-model")
+
+    # Check fetch logic
     cluster = Mock(fetch_kubeconfig=Mock(return_value="new_config"))
-    with safe_kubeconfig(cluster, config=fake_kube_config):
+    with fetch_kubeconfig(cluster, config=fake_kube_config):
 
         # Check that cluster kube config was fetched
         cluster.fetch_kubeconfig.assert_called_once()
         with open(fake_kube_config, "r") as f:
             assert f.read() == "new_config"
 
-    # Check previous config was recovered
-    with open(fake_kube_config, "r") as f:
-        assert f.read() == "previous_config"
+        assert os.environ["KUBECONFIG"] == str(fake_kube_config)
+
+    # Check cleanup
+    assert os.environ.get("KUBECONFIG") is None
+    assert not fake_kube_config.exists()
 
 
 def test_register_metrics():
