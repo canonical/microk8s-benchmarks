@@ -46,8 +46,9 @@ class ParametrizedField(Field):
     It will normalizes the resulting metric by node name
     """
 
-    def __init__(self, name, params, callable):
+    def __init__(self, name, param_name, params, callable):
         self.name = name
+        self.param_name = param_name
         self.params = params
         self.callable = callable
 
@@ -73,16 +74,7 @@ class Metric:
         self.samples: List[Sample] = []
 
     def add_field(self, field: Field):
-        self.check_can_add_field(field)
         self.fields.append(field)
-
-    def check_can_add_field(self, field):
-        if not isinstance(field, ParametrizedField):
-            return
-
-        # Check if there is already a ParametrizedField added
-        if any([isinstance(f, ParametrizedField) for f in self.fields]):
-            raise ValueError("Multiple ParametrizedField fields is not supported")
 
     def collect_fields(self) -> List[Sample]:
         def _insert_value(value, samples):
@@ -93,18 +85,16 @@ class Metric:
                     sample.append(value)
 
         samples = []
-
         for field in self.fields:
             if isinstance(field, ParametrizedField):
-                node_values = [[node, value] for node, value in field.collect()]
-                product = itertools.product(samples, node_values)
+                param_values = [[param, value] for param, value in field.collect()]
+                product = itertools.product(samples, param_values)
                 samples = [prev + new for prev, new in product]
             else:
                 # Collect new field value and append
                 # it to the existing list of samples
                 value = field.collect()
                 _insert_value(value, samples)
-
         return samples
 
     def clear(self):
@@ -115,7 +105,7 @@ class Metric:
         names = []
         for field in self.fields:
             if isinstance(field, ParametrizedField):
-                names.append("node")
+                names.append(field.param_name)
                 names.append(field.name)
             else:
                 names.append(field.name)

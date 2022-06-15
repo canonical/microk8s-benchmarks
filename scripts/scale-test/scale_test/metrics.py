@@ -26,6 +26,7 @@ class DqliteMemory(ClusterMetric):
         self.add_field(
             ParametrizedField(
                 name="memory",
+                param_name="node",
                 params=self.control_plane_nodes,
                 callable=self.get_dqlite_memory,
             )
@@ -47,6 +48,7 @@ class DqliteCPU(ClusterMetric):
         self.add_field(
             ParametrizedField(
                 name="cpu",
+                param_name="node",
                 params=self.control_plane_nodes,
                 callable=self.get_dqlite_cpu,
             )
