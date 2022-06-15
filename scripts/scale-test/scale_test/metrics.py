@@ -25,7 +25,7 @@ class DqliteMemory(ClusterMetric):
         super().__init__(name="dqlite_memory", cluster=cluster)
         self.add_field(
             ParametrizedField(
-                name="memory",
+                name="memory_KB",
                 param_name="node",
                 params=self.control_plane_nodes,
                 callable=self.get_dqlite_memory,
@@ -47,7 +47,7 @@ class DqliteCPU(ClusterMetric):
         super().__init__(name="dqlite_cpu", cluster=cluster)
         self.add_field(
             ParametrizedField(
-                name="cpu",
+                name="cpu_%",
                 param_name="node",
                 params=self.control_plane_nodes,
                 callable=self.get_dqlite_cpu,

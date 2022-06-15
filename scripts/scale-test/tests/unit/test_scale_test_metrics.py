@@ -25,7 +25,7 @@ def test_dqlite_memory_metric():
     metric.sample()
 
     assert metric.samples == [[2, 2, TEST_UNIT_1.name, 3], [2, 2, TEST_UNIT_2.name, 3]]
-    assert metric.field_names == ["total_nodes", "control_plane", "node", "memory"]
+    assert metric.field_names == ["total_nodes", "control_plane", "node", "memory_KB"]
 
 
 def test_dqlite_cpu_metric():
@@ -43,4 +43,4 @@ def test_dqlite_cpu_metric():
         [2, 2, TEST_UNIT_1.name, 5.0],
         [2, 2, TEST_UNIT_2.name, 5.0],
     ]
-    assert metric.field_names == ["total_nodes", "control_plane", "node", "cpu"]
+    assert metric.field_names == ["total_nodes", "control_plane", "node", "cpu_%"]
