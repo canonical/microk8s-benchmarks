@@ -1,6 +1,4 @@
 import random
-from ast import Param
-from audioop import mul
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -133,9 +131,8 @@ def test_variable_field():
 
 
 def test_parametrized_field():
-    multiply_by_2 = lambda x: x * 2
     field = ParametrizedField(
-        "foo", param_name="myparam", params=[1, 2, 3], callable=multiply_by_2
+        "foo", param_name="myparam", params=[1, 2, 3], callable=lambda x: x * 2
     )
 
     # Check that generator yields the right tuples

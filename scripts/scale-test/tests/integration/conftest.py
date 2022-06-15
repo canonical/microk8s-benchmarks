@@ -32,7 +32,7 @@ def cluster_json():
     f = tempfile.NamedTemporaryFile(delete=False)
     master = Unit(name="name", ip="ip", instance_id="id")
     cluster = ClusterInfo(
-        model="foo", master=master, control_plane=[master], workers=[]
+        app="app", model="foo", master=master, control_plane=[master], workers=[]
     )
     f.write(json.dumps(cluster.to_dict()).encode())
     f.file.flush()

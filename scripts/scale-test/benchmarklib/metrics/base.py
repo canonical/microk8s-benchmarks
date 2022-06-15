@@ -42,8 +42,23 @@ class VariableField(Field):
 
 class ParametrizedField(Field):
     """
-    Use to measure metrics that change over time across various nodes.
-    It will normalizes the resulting metric by node name
+    To be used for measurements that need a parameter.
+
+    For instance, when measuring memory consumption of a set of nodes,
+    it will normalize the node parameter as a column of the CSV file
+
+    >>> def get_memory_usage(node):
+    >>>    ...
+
+    >>> nodes = ["node1", "node2"]
+    >>> field = ParametrizedField("memory", param_name="node", params=nodes, callable=get_memory_usage)
+    >>> m = Metric("mymetric")
+    >>> m.add_field(field)
+    >>> m.sample()
+    >>> m.field_names
+    ["node", "memory"]
+    >>> m.samples
+    [["node1", 10], ["node2", 11]]
     """
 
     def __init__(self, name, param_name, params, callable):
@@ -59,13 +74,31 @@ class ParametrizedField(Field):
 
 class Metric:
     """
-    A metric represent a set of samples measured. Each sample is
-    formed of a list of fields with the corresponding sampled values.
-
+    This class allows to perform measurements during the execution of a workload.
     All samples of a metric can be dumped on a csv file.
 
-    Each field correspond to csv columns: the field name matches
-    the column header, and the raws of that column are the collected values.
+    Each added field corresponds to a csv column: the field name matches
+    the column header, and the raws of that column are the collected values for
+    that field.
+
+    It is to be used directly:
+
+    >>> m = Metric(name="mymetric")
+    >>> m.add_field(VariableField("cpu", callable=get_cpu_usage))
+    >>> m.sample()
+
+    or by subclassing it:
+
+    class MyMetric(Metric):
+        def __init__(self):
+            super().__init__(name="mymetric")
+            self.add_field(VariableField("cpu", callable=get_cpu_usage))
+
+    >>> m = MyMetric()
+    >>> m.sample()
+
+    # This will create a metric-mymetric.csv file under ~/my/data/folder
+    >>> m.dump("~/my/data/folder")
     """
 
     def __init__(self, name: str):
@@ -77,16 +110,11 @@ class Metric:
         self.fields.append(field)
 
     def collect_fields(self) -> List[Sample]:
-        def _insert_value(value, samples):
-            if samples == []:
-                samples.append([value])
-            else:
-                for sample in samples:
-                    sample.append(value)
-
         samples = []
         for field in self.fields:
             if isinstance(field, ParametrizedField):
+                # Collect all values for each param, and
+                # extend the existing samples with them.
                 param_values = [[param, value] for param, value in field.collect()]
                 product = itertools.product(samples, param_values)
                 samples = [prev + new for prev, new in product]
@@ -94,7 +122,11 @@ class Metric:
                 # Collect new field value and append
                 # it to the existing list of samples
                 value = field.collect()
-                _insert_value(value, samples)
+                if samples == []:
+                    samples.append([value])
+                else:
+                    for sample in samples:
+                        sample.append(value)
         return samples
 
     def clear(self):
@@ -119,6 +151,9 @@ class Metric:
         self.samples.extend(sampled_values)
 
     def dump(self, path: Path) -> None:
+        """
+        Store the collected metrics into a csv file
+        """
         metric_file = path / f"metric-{self.name}.csv"
         csv_already_exists = metric_file.exists()
         with open(metric_file, "a") as csv_file:
