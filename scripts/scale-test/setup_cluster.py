@@ -34,7 +34,9 @@ class JujuClusterSetup:
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
+        app: str = APP_NAME,
     ):
+        self.app = app
         self.model = model
         self.juju = JujuSession(model=model, app=APP_NAME)
         self.total_nodes = total_nodes
@@ -43,6 +45,7 @@ class JujuClusterSetup:
         self.http_proxy = http_proxy
         self.creds = creds
         self.units: List[Unit] = []
+        self.cluster_info = None
 
     def install_microk8s(
         self,
@@ -231,6 +234,7 @@ class JujuClusterSetup:
         master_node = units.pop(0)
         control_plane -= 1  # master is running control plane already
         cluster = ClusterInfo(
+            app=self.app,
             model=self.model,
             master=master_node,
             control_plane=[master_node],
@@ -265,7 +269,7 @@ class JujuClusterSetup:
         if replicas > 0:
             self.juju.add_units(replicas).check_returncode()
         self.juju.wait_for_model()
-        self.units = self.juju.get_units()
+        self.units = [Unit(**data) for data in self.juju.get_units()]
 
     def save_cluster_info(self, cluster: ClusterInfo):
         clusters_path = Path.cwd() / ".clusters"
@@ -313,7 +317,8 @@ class JujuClusterSetup:
     def destroy(self):
         logging.info(f"Destroying cluster in model {self.model}")
         self.juju.destroy_model()
-        self.cleanup_cluster_info(self.cluster_info)
+        if self.cluster_info:
+            self.cleanup_cluster_info(self.cluster_info)
 
 
 def get_docker_credentials(

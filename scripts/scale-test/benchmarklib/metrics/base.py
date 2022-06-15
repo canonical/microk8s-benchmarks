@@ -40,20 +40,20 @@ class VariableField(Field):
         return self.callable()
 
 
-class NodeAwareField(Field):
+class ParametrizedField(Field):
     """
     Use to measure metrics that change over time across various nodes.
     It will normalizes the resulting metric by node name
     """
 
-    def __init__(self, name, nodes, callable):
+    def __init__(self, name, params, callable):
         self.name = name
-        self.nodes = nodes
+        self.params = params
         self.callable = callable
 
     def collect(self):
-        for node in self.nodes:
-            yield node.name, self.callable(node)
+        for param in self.params:
+            yield param, self.callable(param)
 
 
 class Metric:
@@ -77,12 +77,12 @@ class Metric:
         self.fields.append(field)
 
     def check_can_add_field(self, field):
-        if not isinstance(field, NodeAwareField):
+        if not isinstance(field, ParametrizedField):
             return
 
-        # Check if there is already a NodeAwareField added
-        if any([isinstance(f, NodeAwareField) for f in self.fields]):
-            raise ValueError("Multiple NodeAwareField fields is not supported")
+        # Check if there is already a ParametrizedField added
+        if any([isinstance(f, ParametrizedField) for f in self.fields]):
+            raise ValueError("Multiple ParametrizedField fields is not supported")
 
     def collect_fields(self) -> List[Sample]:
         def _insert_value(value, samples):
@@ -95,7 +95,7 @@ class Metric:
         samples = []
 
         for field in self.fields:
-            if isinstance(field, NodeAwareField):
+            if isinstance(field, ParametrizedField):
                 node_values = [[node, value] for node, value in field.collect()]
                 product = itertools.product(samples, node_values)
                 samples = [prev + new for prev, new in product]
@@ -114,7 +114,7 @@ class Metric:
     def field_names(self) -> List[str]:
         names = []
         for field in self.fields:
-            if isinstance(field, NodeAwareField):
+            if isinstance(field, ParametrizedField):
                 names.append("node")
                 names.append(field.name)
             else:

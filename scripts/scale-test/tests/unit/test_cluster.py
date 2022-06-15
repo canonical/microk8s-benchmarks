@@ -4,14 +4,14 @@ from subprocess import CalledProcessError
 from unittest.mock import mock_open, patch
 
 import pytest
+from utils import get_cluster_info, get_unit
 
 from benchmarklib.clients import juju
 from benchmarklib.cluster import ClusterCommandError, Microk8sCluster
-from benchmarklib.models import ClusterInfo, Unit
 
-TEST_UNIT = Unit(name="foo", ip="bar", instance_id="ba")
+TEST_UNIT = get_unit(name="foo", ip="bar", instance_id="ba")
 
-TEST_CLUSTER_INFO = ClusterInfo(
+TEST_CLUSTER_INFO = get_cluster_info(
     model="test", master=TEST_UNIT, control_plane=[TEST_UNIT], workers=[]
 )
 

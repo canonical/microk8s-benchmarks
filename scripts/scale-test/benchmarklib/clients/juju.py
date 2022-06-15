@@ -1,9 +1,7 @@
 import json
 import logging
 import subprocess
-from typing import List, Optional
-
-from benchmarklib.models import Unit
+from typing import Dict, List, Optional
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"
@@ -27,10 +25,10 @@ class JujuSession:
         self.model = model
         self.app = app
 
-    def run_in_unit(self, *command, unit: Unit):
+    def run_in_unit(self, *command, unit: str):
         return run(*command, unit=unit, model=self.model)
 
-    def run_in_units(self, *command, units: List[Unit]):
+    def run_in_units(self, *command, units: List[str]):
         return run(*command, units=units, model=self.model)
 
     def run_in_all_units(self, *command, timeout: Optional[str] = None):
@@ -54,7 +52,7 @@ class JujuSession:
     def add_units(self, units: int):
         return add_unit(units, self.app, self.model)
 
-    def get_units(self) -> List[Unit]:
+    def get_units(self) -> List[Dict[str, str]]:
         """
         Build the list of ubuntu units from the juju status output
         """
@@ -64,7 +62,7 @@ class JujuSession:
             ip = unit_data["public-address"]
             machine_id = unit_data["machine"]
             hostname = status["machines"][machine_id]["hostname"]
-            units.append(Unit(name=unit_name, instance_id=hostname, ip=ip))
+            units.append(dict(name=unit_name, instance_id=hostname, ip=ip))
         return units
 
 
@@ -84,8 +82,8 @@ def _juju_wait(*args):
 
 def run(
     *command,
-    unit: Optional[Unit] = None,
-    units: Optional[List[Unit]] = None,
+    unit: Optional[str] = None,
+    units: Optional[List[str]] = None,
     app: Optional[str] = None,
     timeout: Optional[str] = None,
     model: Optional[str] = None,
