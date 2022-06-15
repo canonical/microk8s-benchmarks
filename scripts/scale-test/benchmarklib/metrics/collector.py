@@ -29,7 +29,12 @@ class MetricsCollector:
         self._started: bool = False
         self.thread = None
 
-    def _collect_samples(self):
+    def _collect(self):
+        for m in self.metrics:
+            logging.debug(f"Collecting {m}")
+            m.sample()
+
+    def collect_samples(self):
         while True:
             if self.stop_event.wait(0):
                 logging.debug("Catched stop event!")
@@ -37,9 +42,7 @@ class MetricsCollector:
 
             start = time.time()
 
-            for m in self.metrics:
-                logging.debug(f"Collecting {m}")
-                m.sample()
+            self._collect()
 
             elapsed = time.time() - start
 
@@ -55,7 +58,7 @@ class MetricsCollector:
         logging.info("Starting collection of metrics")
         self.stop_event = threading.Event()
         self.thread = CollectorThread(
-            target=self._collect_samples,
+            target=self.collect_samples,
         )
         self.thread.start()
         self._started = True
