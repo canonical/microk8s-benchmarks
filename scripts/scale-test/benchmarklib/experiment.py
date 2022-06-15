@@ -134,12 +134,11 @@ class WorkloadMetrics(MetricsCollector):
         return str(self.workload.yaml)
 
     def __enter__(self):
-        super().__enter__()
         # Inject a field (new column in the metric csv file) to specify
         # from which workload the metrics were collected.
         for metric in self.metrics:
             metric.add_field(self.workload_field)
-        return self
+        return super().__enter__()
 
     def __exit__(self, *exc):
         super().__exit__(self, *exc)
