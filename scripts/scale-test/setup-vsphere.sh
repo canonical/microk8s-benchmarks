@@ -27,7 +27,7 @@ sudo snap install juju  --classic
 sudo snap install juju-wait --classic
 
 echo "Adding vSphere cloud"
-echo >>vs.yaml "clouds:
+echo >> ~/vs.yaml "clouds:
    vsphere:
      type: vsphere
      auth-types: [userpass]
@@ -36,18 +36,18 @@ echo >>vs.yaml "clouds:
        Boston:
          endpoint: 10.246.152.100"
 juju add-cloud vsphere ~/vs.yaml
-rm vs.yaml
+rm ~/vs.yaml
 
 echo "Adding credential"
-echo > vs-cred.yaml "credentials:
+echo > ~/vs-cred.yaml "credentials:
     vsphere:
       k8s-crew:
         auth-type: userpass
         password: $vs_pass
         user: $vs_user
         vmfolder: k8s-crew-root"
-juju add-credential vsphere -f vs-cred.yaml --client
-rm vs-cred.yaml
+juju add-credential vsphere -f ~/vs-cred.yaml --client
+rm ~/vs-cred.yaml
 
 echo "Bootstrapping cloud..."
 juju bootstrap \

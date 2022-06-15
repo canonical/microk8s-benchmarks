@@ -184,7 +184,7 @@ def test_install_microk8s_configures_containerd_iif_provided(
 
     mgr.install_microk8s(units, creds=creds)
 
-    mgr.configure_containerd.assert_called_once_with(creds)
+    mgr.configure_containerd.assert_called_once_with(creds, None)
 
 
 @patch("setup_cluster.JujuClusterSetup.wait_microk8s_ready")
