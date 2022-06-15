@@ -1,10 +1,8 @@
 import logging
 import os
-import shutil
 from contextlib import ContextDecorator, contextmanager
 from datetime import datetime
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional
 
 from benchmarklib.cluster import Microk8sCluster
@@ -109,7 +107,7 @@ class Experiment:
                 self.cluster.disable([addon.disable])
 
     def run(self):
-        with safe_kubeconfig(self.cluster):
+        with fetch_kubeconfig(self.cluster):
             try:
                 self.bootstrap()
                 self.start()
@@ -149,27 +147,34 @@ class WorkloadMetrics(MetricsCollector):
             metric.remove_field(self.workload_field)
 
 
-class safe_kubeconfig(ContextDecorator):
+class fetch_kubeconfig(ContextDecorator):
     """
-    This context manager handles fetching kube config from the current cluster while keeping existing config safe.
-    This will probably not be needed once we have a way to merge several microk8s configs into a single config file.
+    This context manager handles fetching kube config from the current cluster.
+    Then it sets the KUBECONFIG env variable so that all kubectl commands executed
+    are pointing to the right cluster config.
     """
 
     def __init__(self, cluster: Microk8sCluster, config: Optional[Path] = None):
         self.cluster = cluster
-        self.config_file = config if config else Path.home() / ".kube/config"
-        self.backup = None
+        self._config_file = config
 
     def __enter__(self):
-        self.backup = self.maybe_backup_current_config()
-        self.copy_kubeconfig_from_cluster()
-        return self
+        self.fetch_kubeconfig_from_cluster()
+        os.environ["KUBECONFIG"] = str(self.config_file)
 
     def __exit__(self, *exc):
-        if self.backup:
-            self.recover_config(self.backup)
+        self.cleanup_kubeconfig()
+        os.environ.pop("KUBECONFIG", None)
 
-    def copy_kubeconfig_from_cluster(self):
+    @property
+    def config_file(self) -> Path:
+        if self._config_file is None:
+            # Store it in default k8s config folder
+            model = self.cluster.info.model
+            self._config_file = Path.home() / ".kube" / f"config_{model}"
+        return self._config_file
+
+    def fetch_kubeconfig_from_cluster(self):
         cluster_kubeconfig = self.cluster.fetch_kubeconfig()
         if not self.config_file.parent.exists():
             os.mkdir(self.config_file.parent)
@@ -177,26 +182,8 @@ class safe_kubeconfig(ContextDecorator):
         with open(self.config_file, mode="w") as f:
             f.write(cluster_kubeconfig)
 
-    def maybe_backup_current_config(self) -> Optional[NamedTemporaryFile]:
-        """
-        Backup current kube config ~/.kube/config file into a temporary file
-        """
-        if not self.config_file.exists():
-            # Nothing to do
-            return
-
-        tmpdir = NamedTemporaryFile(delete=False)
-        logging.debug(
-            f"Backing up existing kube config {self.config_file} --> {tmpdir.name}"
-        )
-        shutil.move(self.config_file, tmpdir.name)
-        return tmpdir
-
-    def recover_config(self, backup_config: NamedTemporaryFile) -> None:
-        """
-        Recover a previously backed up kube config file to ~/.kube/config
-        """
-        logging.debug(
-            f"Recovering kube config {backup_config.name} -> {self.config_file}"
-        )
-        shutil.move(backup_config.name, self.config_file)
+    def cleanup_kubeconfig(self) -> None:
+        try:
+            os.unlink(self.config_file)
+        except FileNotFoundError:
+            pass
