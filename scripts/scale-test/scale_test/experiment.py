@@ -42,13 +42,7 @@ def get_cluster_dns_server(cluster: Microk8sCluster) -> str:
     return resp.stdout.decode().strip()
 
 
-def main():
-    args = parse_args()
-    configure_logging(args)
-
-    # Setup cluster manager
-    cluster = Microk8sCluster.from_file(Path(args.cluster_file))
-
+def run_experiment(cluster: Microk8sCluster):
     # Addons
     dns_server = get_cluster_dns_server(cluster)
     dns = Addon(name="dns", enable_arg=dns_server)
@@ -76,6 +70,13 @@ def main():
     scaletest.register_metrics([dqlite_memory, dqlite_cpu])
 
     scaletest.run()
+
+
+def main():
+    args = parse_args()
+    configure_logging(args)
+    cluster = Microk8sCluster.from_file(Path(args.cluster_file))
+    run_experiment(cluster)
 
 
 if __name__ == "__main__":

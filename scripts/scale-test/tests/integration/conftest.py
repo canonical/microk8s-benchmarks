@@ -86,7 +86,7 @@ def setup_cluster_fixtures(
 
 
 @pytest.fixture()
-def scale_test_fixtures(
+def experiment_fixtures(
     subprocess_run_mock,
     workload_time,
     cluster_json,
@@ -94,5 +94,13 @@ def scale_test_fixtures(
     data_lake,
     temp_dir,
     collector_poll_period,
+):
+    yield
+
+
+@pytest.fixture()
+def benchmark_fixtures(
+    experiment_fixtures,
+    setup_cluster_fixtures,
 ):
     yield

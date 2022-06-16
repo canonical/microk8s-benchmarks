@@ -72,3 +72,53 @@ def test_context_manager_dumps_metrics_on_exception(temp_dir):
         lines = contents.split()
         assert len(lines) >= 1
         assert lines[0] == "cluster_size,memory_usage"
+
+
+def test_exception_in_thread_is_handled():
+    class FailingMetric(Metric):
+        def __init__(self):
+            super().__init__("I will fail")
+            self.add_field(VariableField("fail", self.get_value))
+
+        def get_value(self):
+            raise KeyError("some error")
+
+    metric = FailingMetric()
+    collector = MetricsCollector(
+        metrics=[metric],
+        poll_period=0,
+    )
+    with pytest.raises(KeyError):
+        with collector:
+            pass
+
+
+def _test_collect_parallel_vs_serially():
+    import time
+
+    from benchmarklib.utils import pp_time
+
+    class MyMetric(Metric):
+        def __init__(self, name):
+            super().__init__(name)
+            self.add_field(ConstantField("cluster_size", 10))
+            self.add_field(VariableField("memory_usage", self.get_value))
+
+        def get_value(self):
+            sleep_time = random.uniform(0, 3)
+            print(f"Going to sleep for {sleep_time}s")
+            time.sleep(sleep_time)
+            return sleep_time
+
+    metrics = [MyMetric(f"foo_{i}") for i in range(10)]
+    collector = MetricsCollector(metrics=metrics, poll_period=0)
+
+    start = time.time()
+    collector._collect_serially()
+    duration = time.time() - start
+    print(f"Serial Took = {pp_time(duration)}")
+
+    start = time.time()
+    collector._collect_in_parallel()
+    duration = time.time() - start
+    print(f"Serial Took = {pp_time(duration)}")
