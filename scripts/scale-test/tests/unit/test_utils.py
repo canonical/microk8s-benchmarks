@@ -6,7 +6,7 @@ from benchmarklib.utils import timeit
 def test_timeit_decorator(caplog):
     caplog.set_level(logging.DEBUG)
 
-    @timeit
+    @timeit("myfunc")
     def myfunc(a):
         return a + 1
 

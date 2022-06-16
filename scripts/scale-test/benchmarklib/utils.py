@@ -1,5 +1,6 @@
 import logging
 import time
+from contextlib import ContextDecorator
 
 
 def pp_time(elapsed: int) -> str:
@@ -26,21 +27,17 @@ def pp_time(elapsed: int) -> str:
     return final or "0s"
 
 
-class timeit:
-    def __init__(self, func):
-        self.func = func
+class timeit(ContextDecorator):
+    def __init__(self, func_name):
+        self.func_name = func_name
 
-    def __call__(self, *args, **kwargs):
-        func_name = self.func.__name__
-        start = time.time()
-        try:
-            logging.debug(f"{func_name} started")
-            result = self.func(*args, **kwargs)
-        except Exception:
-            elapsed = int(time.time() - start)
-            logging.debug(f"{func_name} errored after {pp_time(elapsed)}.")
-            raise
+    def __enter__(self):
+        self.start = time.time()
+        logging.debug(f"{self.func_name} started")
+
+    def __exit__(self, exc_type, exc, exc_tb):
+        elapsed = time.time() - self.start
+        if exc is not None:
+            logging.debug(f"{self.func_name} errored after {pp_time(elapsed)}.")
         else:
-            elapsed = int(time.time() - start)
-            logging.debug(f"{func_name} took {pp_time(elapsed)}.")
-            return result
+            logging.debug(f"{self.func_name} took {pp_time(elapsed)}.")

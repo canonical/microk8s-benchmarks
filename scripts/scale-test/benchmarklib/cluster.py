@@ -2,7 +2,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 from benchmarklib.clients import kubectl
 from benchmarklib.clients.juju import JujuSession
@@ -14,6 +14,9 @@ class ClusterCommandError(Exception):
         self.command = command
         self.stdout = stdout
         self.stderr = stderr
+
+
+UnitParam = Union[Unit, str]
 
 
 class Microk8sCluster:
@@ -38,7 +41,7 @@ class Microk8sCluster:
     def get_master_node(self) -> Unit:
         return self.info.master
 
-    def run_in_unit(self, unit: Union[Unit, str], command: str):
+    def run_in_unit(self, unit: UnitParam, command: str):
         unit_name = unit
         if isinstance(unit, Unit):
             unit_name = unit.name
@@ -51,6 +54,23 @@ class Microk8sCluster:
             stderr = resp.stderr.decode().strip()
             stdout = resp.stdout.decode()
             logging.error(f"Error running {command} on {unit_name}: {stderr}")
+            raise ClusterCommandError(command, stdout, stderr) from err
+
+    def run_in_units(
+        self, units: List[UnitParam], command: str, format: Optional[str] = None
+    ):
+        unit_names = units
+        if isinstance(units[0], Unit):
+            unit_names = [unit.name for unit in units]
+
+        resp = self.juju.run_in_units(command, units=unit_names, format=format)
+        try:
+            resp.check_returncode()
+            return resp
+        except subprocess.CalledProcessError as err:
+            stderr = resp.stderr.decode().strip()
+            stdout = resp.stdout.decode()
+            logging.error(f"Error running {command} on {unit_names}: {stderr}")
             raise ClusterCommandError(command, stdout, stderr) from err
 
     def run_in_master_node(self, command: str):

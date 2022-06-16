@@ -9,7 +9,7 @@ from typing import List, Optional
 from benchmarklib.metrics.base import Metric
 from benchmarklib.utils import pp_time
 
-DEFAULT_POLL_PERIOD = 10
+DEFAULT_POLL_PERIOD = 15
 
 
 class MetricsCollector:
@@ -39,21 +39,6 @@ class MetricsCollector:
         for m in self.metrics:
             m.sample()
 
-    def _collect_in_parallel(self):
-        """
-        Starts a different thread for samling each metric
-        """
-        threads = []
-        for m in self.metrics:
-            thread = Thread(target=m.sample)
-            thread.start()
-            threads.append(thread)
-
-        # Wait for them to finish
-        for thread in threads:
-            thread.join()
-            thread.maybe_raise_child_exception()
-
     def collect_samples(self):
         """
         Collects samples from metrics until the stop event is set
@@ -65,17 +50,15 @@ class MetricsCollector:
 
             start = time.time()
 
-            self._collect_in_parallel()
+            self._collect_serially()
 
             elapsed = time.time() - start
 
-            sleep_time = self.poll_period - elapsed
-            if sleep_time < 0:
+            sleep_time = max(self.poll_period - elapsed, 0)
+            if elapsed > self.poll_period:
                 logging.warning(
                     f"Collecting metrics took longer than poll period: {pp_time(elapsed)} vs {pp_time(self.poll_period)}"  # noqa
                 )
-                continue
-
             time.sleep(sleep_time)
 
     def start_thread(self):
@@ -116,6 +99,7 @@ class MetricsCollector:
     def __enter__(self):
         if self.metrics:
             self.start_thread()
+            self._started = True
         return self
 
     def __exit__(self, *args, **kwargs):

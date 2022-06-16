@@ -40,7 +40,7 @@ class VariableField(Field):
         return self.callable()
 
 
-class ParametrizedField(Field):
+class MultidimensionalField(Field):
     """
     To be used for measurements that need a parameter.
 
@@ -51,7 +51,7 @@ class ParametrizedField(Field):
     >>>    ...
 
     >>> nodes = ["node1", "node2"]
-    >>> field = ParametrizedField("memory", param_name="node", params=nodes, callable=get_memory_usage)
+    >>> field = MultidimensionalField("memory", param_name="node", params=nodes, callable=get_memory_usage)
     >>> m = Metric("mymetric")
     >>> m.add_field(field)
     >>> m.sample()
@@ -67,9 +67,9 @@ class ParametrizedField(Field):
         self.params = params
         self.callable = callable
 
-    def collect(self):
-        for param in self.params:
-            yield param, self.callable(param)
+    def collect(self) -> List[List[Any]]:
+        samples = self.callable(self.params)
+        return samples
 
 
 class Metric:
@@ -112,10 +112,10 @@ class Metric:
     def collect_fields(self) -> List[Sample]:
         samples = []
         for field in self.fields:
-            if isinstance(field, ParametrizedField):
+            if isinstance(field, MultidimensionalField):
                 # Collect all values for each param, and
                 # extend the existing samples with them.
-                param_values = [[param, value] for param, value in field.collect()]
+                param_values = field.collect()
                 product = itertools.product(samples, param_values)
                 samples = [prev + new for prev, new in product]
             else:
@@ -136,7 +136,7 @@ class Metric:
     def field_names(self) -> List[str]:
         names = []
         for field in self.fields:
-            if isinstance(field, ParametrizedField):
+            if isinstance(field, MultidimensionalField):
                 names.append(field.param_name)
                 names.append(field.name)
             else:

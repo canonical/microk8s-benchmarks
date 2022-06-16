@@ -404,7 +404,7 @@ def configure_logging(debug: bool = False):
     logging.root.setLevel(level=level)
 
 
-@timeit
+@timeit("main")
 def main():
     args = parse_arguments()
     error = False

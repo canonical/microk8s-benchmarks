@@ -2,7 +2,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -79,6 +79,19 @@ def all_nodes_joined_mock():
 
 
 @pytest.fixture()
+def run_in_units_mock():
+    run_in_unit_json_response = [
+        {"Stdout": "382904\n", "UnitId": "microk8s-node/0"},
+        {"Stdout": "335856\n", "UnitId": "microk8s-node/1"},
+    ]
+    return_value = Mock(stdout=json.dumps(run_in_unit_json_response).encode())
+    with patch(
+        "scale_test.metrics.Microk8sCluster.run_in_units", return_value=return_value
+    ):
+        yield
+
+
+@pytest.fixture()
 def setup_cluster_fixtures(
     juju_status_mock, subprocess_run_mock, all_nodes_joined_mock, path_cwd_mock
 ):
@@ -87,6 +100,7 @@ def setup_cluster_fixtures(
 
 @pytest.fixture()
 def experiment_fixtures(
+    run_in_units_mock,
     subprocess_run_mock,
     workload_time,
     cluster_json,

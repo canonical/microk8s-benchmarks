@@ -87,14 +87,14 @@ class Experiment:
         We deploy workloads on a new temporary namespace so that it is easier
         to cleanup whatever was deployed.
         """
-        # TODO: Verify namespace is conformant to: [a-z0-9]([-a-z0-9]*[a-z0-9])?'
-        # and if not, raise an error.
-        namespace = self.name.replace("_", "-")
-        self.cluster.create_namespace(namespace)
-
-        yield namespace
-
-        self.cluster.delete_namespace(namespace)
+        try:
+            # TODO: Verify namespace is conformant to: [a-z0-9]([-a-z0-9]*[a-z0-9])?'
+            # and if not, raise an error.
+            namespace = self.name.replace("_", "-")
+            self.cluster.create_namespace(namespace)
+            yield namespace
+        finally:
+            self.cluster.delete_namespace(namespace)
 
     def bootstrap(self):
         logging.info("Bootstrapping cluster")
@@ -104,8 +104,9 @@ class Experiment:
 
     def teardown(self):
         logging.info("Cluster teardown")
-        for addon in self.required_addons:
-            self.cluster.disable([addon.disable])
+        if len(self.required_addons) > 0:
+            addons = [addon.disable for addon in self.required_addons]
+            self.cluster.disable(addons)
 
     def run(self):
         with fetch_kubeconfig(self.cluster):
@@ -149,7 +150,7 @@ class WorkloadMetrics(MetricsCollector):
 
 class fetch_kubeconfig(ContextDecorator):
     """
-    This context manager handles fetching kube config from the current cluster.
+    This context manager handles fetching kube config from the provided cluster.
     Then it sets the KUBECONFIG env variable so that all kubectl commands executed
     are pointing to the right cluster config.
     """

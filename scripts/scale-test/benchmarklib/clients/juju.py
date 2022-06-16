@@ -28,8 +28,8 @@ class JujuSession:
     def run_in_unit(self, *command, unit: str):
         return run(*command, unit=unit, model=self.model)
 
-    def run_in_units(self, *command, units: List[str]):
-        return run(*command, units=units, model=self.model)
+    def run_in_units(self, *command, units: List[str], format=None):
+        return run(*command, units=units, model=self.model, format=format)
 
     def run_in_all_units(self, *command, timeout: Optional[str] = None):
         return run(*command, app=self.app, model=self.model, timeout=timeout)
@@ -87,6 +87,7 @@ def run(
     app: Optional[str] = None,
     timeout: Optional[str] = None,
     model: Optional[str] = None,
+    format: Optional[str] = None,
 ):
     """
     Run a command on a juju unit or on all units of a particular application
@@ -103,6 +104,9 @@ def run(
         juju_command.extend(["-m", model])
     if timeout:
         juju_command.extend(["--timeout", timeout])
+    if format:
+        juju_command.extend(["--format", format])
+
     if app:
         juju_command.extend(["-a", app, "--", *command])
     else:
