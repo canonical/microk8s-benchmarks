@@ -11,8 +11,4 @@ def test_experiment(experiment_fixtures, cluster_json):
 
 
 def test_benchmark(benchmark_fixtures):
-    # serially
-    benchmark_main(1)
-
-    # in parallel
-    benchmark_main(3)
+    benchmark_main()

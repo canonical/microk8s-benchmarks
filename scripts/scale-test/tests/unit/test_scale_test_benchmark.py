@@ -1,7 +1,7 @@
 import os
 
 from benchmarklib.models import DockerCredentials
-from scale_test.benchmark import Process, get_docker_credentials, valid_cluster_shapes
+from scale_test.benchmark import get_docker_credentials, valid_cluster_shapes
 
 
 def test_valid_cluster_shapes():
@@ -19,16 +19,3 @@ def test_get_docker_credentials():
 
     os.environ.pop("DOCKER_USERNAME")
     os.environ.pop("DOCKER_PASSWORD")
-
-
-def test_Process():
-    def target():
-        raise ValueError("foobar")
-
-    p = Process(target=target, args=())
-    p.start()
-    p.join()
-
-    assert p.exception is not None
-    assert isinstance(p.exception[0], ValueError)
-    assert isinstance(p.exception[1], str)
