@@ -1,7 +1,6 @@
 import itertools
 from typing import Optional
 
-from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
 from setup_cluster import JujuClusterSetup
@@ -44,10 +43,9 @@ def run_benchmark():
             http_proxy=HTTP_PROXY,
             creds=get_docker_credentials(),
         )
-        with mgr.temporary_setup() as cluster_info:
+        with mgr.temporary_setup() as cluster:
 
             # Run scale-test experiment on it
-            cluster = Microk8sCluster(cluster_info)
             run_experiment(cluster)
 
 

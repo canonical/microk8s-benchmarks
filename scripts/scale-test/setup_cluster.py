@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from benchmarklib.clients.juju import JujuSession
+from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
 from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
 from benchmarklib.utils import timeit
@@ -298,7 +299,7 @@ class JujuClusterSetup:
         finally:
             self.destroy()
 
-    def setup(self) -> ClusterInfo:
+    def setup(self) -> Microk8sCluster:
         worker_nodes = self.total_nodes - self.control_plane_nodes
         logging.info(
             f"Setting up a microk8s (channel={self.channel}) {self.total_nodes}-node cluster (cp={self.control_plane_nodes}, w={worker_nodes})"  # noqa
@@ -312,7 +313,7 @@ class JujuClusterSetup:
         cluster_info = self.form_cluster(self.control_plane_nodes)
         self.save_cluster_info(cluster_info)
         self.cluster_info = cluster_info
-        return cluster_info
+        return Microk8sCluster(cluster_info)
 
     def destroy(self):
         logging.info(f"Destroying cluster in model {self.model}")
