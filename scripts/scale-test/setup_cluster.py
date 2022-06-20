@@ -7,6 +7,7 @@ import time
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from pathlib import Path
+from traceback import walk_stack
 from typing import List, Optional
 
 from benchmarklib.clients.juju import JujuSession
@@ -44,7 +45,7 @@ class JujuClusterSetup:
     ):
         self.app = app
         self.model = model
-        self.juju = JujuSession(model=model, app=APP_NAME)
+        self.juju = JujuSession(model=self.model, app=self.app)
         self.total_nodes = total_nodes
         self.control_plane_nodes = control_plane_nodes
         self.channel = channel
@@ -52,6 +53,7 @@ class JujuClusterSetup:
         self.creds = creds
         self.private_registry = private_registry
         self.units: List[Unit] = []
+        self.idle_units: List[Unit] = []
         self.cluster_info = None
 
     def install_microk8s(
@@ -359,6 +361,52 @@ class JujuClusterSetup:
         self.juju.destroy_model()
         if self.cluster_info:
             self.cleanup_cluster_info(self.cluster_info)
+
+    def reshape(self, target_total: int, target_cp: int):
+        """ """
+        units_diff = self.total_nodes - target_total
+        if units_diff < 0:
+            self.maybe_add_more_units(abs(units_diff))
+
+        # Compute how many we need to add/remove of each kind
+        cp_diff = self.control_plane_nodes - target_cp
+        current_wks = self.total_nodes - self.control_plane_nodes
+        target_wks = target_total - target_cp
+        wks_diff = current_wks - target_wks
+        cp_to_add = abs(max(0, cp_diff))
+        cp_to_rem = abs(min(0, cp_diff))
+        wks_to_add = abs(max(0, wks_diff))
+        wks_to_rem = abs(min(0, wks_diff))
+
+        # Leave nodes first
+        nodes_to_leave = []
+        for _ in range(cp_to_rem):
+            cp = self.cluster_info.control_plane.pop(-1)
+            nodes_to_leave.append(cp)
+        for _ in range(wks_to_rem):
+            wkr = self.cluster_info.workers.pop(-1)
+            nodes_to_leave.append(wkr)
+
+        if len(nodes_to_leave) > 0:
+            self.leave_nodes(nodes_to_leave)
+
+        # Finally add if needed
+        if cp_to_add > 0:
+            self.add_control_plane_nodes(cp_to_add)
+        if wks_to_add > 0:
+            self.add_worker_nodes(wks_to_add)
+
+    def leave_nodes(self, nodes: List[Unit]):
+        # TODO
+        pass
+
+    def add_control_plane_nodes(self, n: int):
+        # TODO
+        pass
+
+    def add_worker_nodes(self, n: int):
+        # TODO
+        pass
 
 
 def get_docker_credentials(
