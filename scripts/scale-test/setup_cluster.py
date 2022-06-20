@@ -292,7 +292,7 @@ class JujuClusterSetup:
             pass
 
     @contextmanager
-    def temporary_setup(self):
+    def temporary_cluster(self):
         try:
             cluster_info = self.setup()
             yield cluster_info

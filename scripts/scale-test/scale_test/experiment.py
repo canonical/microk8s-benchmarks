@@ -47,13 +47,20 @@ def run_experiment(cluster: Microk8sCluster):
     dns_server = get_cluster_dns_server(cluster)
     dns = Addon(name="dns", enable_arg=dns_server)
     hostpath = Addon(name="hostpath-storage", disable_arg="destroy-storage")
-    prometheus = Addon(name="prometheus")
+    # prometheus = Addon(name="prometheus")
+
+    # Uncommenting prometheus addon until we have sorted out a
+    # local registry solution, as it pulls a lot of images.
+    required_addons = [
+        dns,
+        hostpath,
+    ]  # prometheus]
 
     # Experiment
     scaletest = Experiment(
         "scale-test",
         cluster=cluster,
-        required_addons=[dns, hostpath, prometheus],
+        required_addons=required_addons,
     )
 
     # Workloads
