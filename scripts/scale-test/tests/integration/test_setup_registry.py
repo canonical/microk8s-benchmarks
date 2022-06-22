@@ -9,10 +9,7 @@ import registry
     "argv",
     [
         "setup_registry",
-        "--action",
         "setup",
-        "--channel",
-        "latest/edge",
         "--http-proxy",
         "http://myproxy",
     ],
@@ -25,6 +22,6 @@ def test_main_push(setup_registry_fixtures, docker_images_json):
     with patch.object(
         sys,
         "argv",
-        ["setup_registry", "--action", "push", "--file", docker_images_json],
+        ["setup_registry", "push", "--file", docker_images_json],
     ):
         registry.main()

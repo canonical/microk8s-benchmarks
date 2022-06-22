@@ -287,7 +287,12 @@ def push_images(images: DockerImages, registry_addr: Optional[str] = None):
     pusher.push()
 
 
-def get_images_from_snap(channel: str, http_proxy: Optional[str] = None):
+def get_images_from_snap(
+    channel: Optional[str] = None, http_proxy: Optional[str] = None
+):
+    if channel is None:
+        channel = DEFAULT_UK8S_CHANNEL
+
     img_getter = ImageGetter()
     images = img_getter.from_snap(channel, http_proxy)
     img_getter.save(name=channel)
@@ -308,54 +313,58 @@ def get_images_from_cluster(clusterfile):
 
 
 def parse_arguments():
-    # create the top-level parser
     parser = argparse.ArgumentParser(prog="setup_registry")
-    parser.add_argument("--action", choices=["setup", "push"], required=True)
-    parser.add_argument("--file", type=str, help="Path to images file")
-    parser.add_argument("--cluster", type=str, help="Path to cluster file")
-    parser.add_argument("-l", "--run-locally", action="store_true", default=False)
-    parser.add_argument("-r", "--registry", type=str)
-    parser.add_argument(
-        "--http-proxy", type=str, help="HTTP proxy to setup the units with"
+    subparsers = parser.add_subparsers(help="commands")
+
+    # Setup args
+    setup_parser = subparsers.add_parser("setup", help="Setup the registry VM")
+    setup_parser.add_argument(
+        "--http-proxy",
+        type=str,
+        help="HTTP proxy to setup the units with",
+        default=None,
     )
-    parser.add_argument(
+    setup_parser.set_defaults(handler=setup_docker_registry)
+
+    # Push args
+    push_parser = subparsers.add_parser("push", help="Push images to the registry")
+    group = push_parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--file", type=str, help="Path to images file")
+    group.add_argument("--cluster", type=str, help="Path to cluster file")
+    group.add_argument(
         "--channel",
-        default=DEFAULT_UK8S_CHANNEL,
+        default=None,
         type=str,
         help="Microk8s channel from which to download the images",
     )
+    push_parser.add_argument(
+        "-r",
+        "--registry",
+        type=str,
+        help="Push images locally to the specified registry. (e.g: http://10.222.111.2:5000)",
+        default=None,
+    )
+    push_parser.set_defaults(handler=push_docker_images)
     return parser.parse_args()
 
 
-def _validate_push_args(args):
-    required_args = [args.file, args.cluster, args.channel]
-    if not any(required_args) or all(required_args):
-        raise ValueError(
-            "Need to specify either --file, --channel or --cluster arguments"
-        )
-    if args.run_locally and args.registry is None:
-        raise ValueError("Need to speficy --registry (eg: http://10.248.168.29:5000)")
+def push_docker_images(args):
+    if args.file:
+        images = get_images_from_file(args.file)
+    elif args.cluster:
+        images = get_images_from_cluster(args.cluster)
+    else:  # args.channel:
+        images = get_images_from_snap(args.channel, args.http_proxy)
+    push_images(images, args.registry)
+
+
+def setup_docker_registry(args):
+    RegistrySetup(args.http_proxy).setup()
 
 
 def main():
     args = parse_arguments()
-
-    if args.action == "push":
-        _validate_push_args(args)
-
-        # Get list of images to push
-        if args.file:
-            images = get_images_from_file(args.file)
-        elif args.cluster:
-            images = get_images_from_cluster(args.cluster)
-        else:  # args.channel:
-            images = get_images_from_snap(args.channel, args.http_proxy)
-
-        # Push them to the registry
-        push_images(images, args.registry)
-
-    elif args.action == "setup":
-        setup_docker_registry(args.http_proxy)
+    args.handler(args)
 
 
 if __name__ == "__main__":
