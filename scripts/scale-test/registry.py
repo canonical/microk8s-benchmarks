@@ -102,7 +102,7 @@ class LocalPusher(DockerImagePusher):
 
     def __init__(self, images: DockerImages, registry_addr: str):
         super().__init__(images)
-        self.registry_addr = registry_addr
+        self._registry_addr = registry_addr.lstrip("http://")
 
     def run_commands(self, commands: List[str]):
         for command in commands:
@@ -362,8 +362,13 @@ def setup_docker_registry(args):
     RegistrySetup(args.http_proxy).setup()
 
 
+def configure_logging():
+    logging.root.setLevel(logging.DEBUG)
+
+
 def main():
     args = parse_arguments()
+    configure_logging()
     args.handler(args)
 
 
