@@ -275,10 +275,6 @@ class RegistrySetup:
         self.run_in_unit(command)
 
 
-def setup_docker_registry(http_proxy: Optional[str] = None):
-    return RegistrySetup(http_proxy).setup()
-
-
 def push_images(images: DockerImages, registry_addr: Optional[str] = None):
     if registry_addr:
         pusher = LocalPusher(images, registry_addr)
