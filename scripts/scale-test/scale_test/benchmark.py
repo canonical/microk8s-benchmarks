@@ -1,12 +1,13 @@
 import itertools
+import os
 from typing import Optional
 
 from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
 from setup_cluster import JujuClusterSetup
 
-TOTAL_NODES = (1, 10, 30, 50, 100)
-CONTROL_PLANE = (1, 3, 5)
+TOTAL_NODES = (5, 10, 20, 40, 60, 80, 100)
+CONTROL_PLANE = (5,)
 CHANNEL = "latest/edge"
 HTTP_PROXY = "http://squid.internal:3128"
 
@@ -15,7 +16,7 @@ def valid_cluster_shapes():
     product = itertools.product(CONTROL_PLANE, TOTAL_NODES)
     # Filter out shapes where cp < total nodes
     valid_shapes = [(cp, total) for (cp, total) in product if total >= cp]
-    return sorted(valid_shapes, key=lambda x: x[1])
+    return sorted(valid_shapes, key=lambda x: (x[1], x[0]))
 
 
 def get_docker_credentials() -> Optional[DockerCredentials]:
@@ -23,6 +24,10 @@ def get_docker_credentials() -> Optional[DockerCredentials]:
         return DockerCredentials.from_env()
     except KeyError:
         return None
+
+
+def get_private_registry() -> Optional[str]:
+    return os.environ.get("REGISTRY")
 
 
 def get_model_name(total_nodes, control_plane) -> str:
@@ -39,6 +44,7 @@ def run_benchmark():
             channel=CHANNEL,
             http_proxy=HTTP_PROXY,
             creds=get_docker_credentials(),
+            private_registry=get_private_registry(),
         )
         with mgr.temporary_cluster() as cluster:
             run_experiment(cluster)

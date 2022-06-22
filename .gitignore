@@ -133,4 +133,5 @@ dmypy.json
 .tox_env
 
 # From scale-test
-.clusters/*
+.clusters/
+.docker_images/

@@ -28,6 +28,14 @@ class Microk8sCluster:
         self.info = info
         self.juju = JujuSession(model=info.model, app=info.app)
 
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self):
+        return (
+            f"Microk8sCluster[model={self.info.model}][nodes={self.size}, cp={self.cp}]"
+        )
+
     @classmethod
     def from_file(klass, cluster_file: Path):
         with open(cluster_file, mode="r") as f:
@@ -37,6 +45,10 @@ class Microk8sCluster:
     @property
     def size(self) -> int:
         return len(self.info.control_plane) + len(self.info.workers)
+
+    @property
+    def cp(self) -> int:
+        return len(self.info.control_plane)
 
     def get_master_node(self) -> Unit:
         return self.info.master

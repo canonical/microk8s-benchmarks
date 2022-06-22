@@ -11,7 +11,11 @@ from typing import List, Optional
 
 from benchmarklib.clients.juju import JujuSession
 from benchmarklib.cluster import Microk8sCluster
-from benchmarklib.constants import DEFAULT_ADD_NODE_TOKEN, DEFAULT_ADD_NODE_TOKEN_TTL
+from benchmarklib.constants import (
+    DEFAULT_ADD_NODE_TOKEN,
+    DEFAULT_ADD_NODE_TOKEN_TTL,
+    KnownRegistries,
+)
 from benchmarklib.models import ClusterInfo, DockerCredentials, Unit
 from benchmarklib.utils import timeit
 
@@ -35,6 +39,7 @@ class JujuClusterSetup:
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
+        private_registry: Optional[str] = None,
         app: str = APP_NAME,
     ):
         self.app = app
@@ -45,6 +50,7 @@ class JujuClusterSetup:
         self.channel = channel
         self.http_proxy = http_proxy
         self.creds = creds
+        self.private_registry = private_registry
         self.units: List[Unit] = []
         self.cluster_info = None
 
@@ -53,6 +59,7 @@ class JujuClusterSetup:
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
+        private_registry: Optional[str] = None,
     ):
         """
         Installs microk8s snaps on all deployed units.
@@ -65,8 +72,8 @@ class JujuClusterSetup:
         self.install_snap(channel)
         self.update_etc_hosts()
 
-        if creds:
-            self.configure_containerd(creds)
+        if creds or private_registry:
+            self.configure_containerd(creds, private_registry)
 
         self.wait_microk8s_ready()
 
@@ -101,12 +108,43 @@ class JujuClusterSetup:
         cmd = "sudo snap restart microk8s.daemon-containerd"
         self.juju.run_in_all_units(cmd).check_returncode()
 
-    def configure_containerd(self, creds: DockerCredentials):
+    def configure_containerd(self, creds, registry_addr):
         """
         Configure docker credentials if specified.
         """
-        self.configure_containerd_credentials(creds)
-        self.restart_containerd()
+        if creds:
+            self.configure_containerd_credentials(creds)
+        if registry_addr:
+            self.configure_containerd_registries(registry_addr)
+        if creds or registry_addr:
+            self.restart_containerd()
+
+    def configure_containerd_mirror(self, registry, private_registry_addr):
+        logging.info(f"Configuring registry mirror for {registry}")
+        # # /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml
+        # server = "http://my.registry.internal:5000"
+
+        # [host."http://my.registry.internal:5000"]
+        # capabilities = ["pull", "resolve"]
+        registry_cert_dir = f"/var/snap/microk8s/current/args/certs.d/{registry}"
+        hosts_file = f"{registry_cert_dir}/hosts.toml"
+        commands = [
+            f"rm -rf {hosts_file}",
+            f"mkdir -p {registry_cert_dir}",
+        ]
+        lines = [
+            f'server = \\"{private_registry_addr}\\"',
+            f'[host.\\"{private_registry_addr}\\"]',
+            'capabilities = [\\"pull\\", \\"resolve\\"]',
+        ]
+        for line in lines:
+            commands.append(f'echo "{line}" >> {hosts_file}')
+        cmd = ";".join(commands)
+        self.juju.run_in_all_units(cmd).check_returncode()
+
+    def configure_containerd_registries(self, private_registry_addr: str):
+        for registry in KnownRegistries:
+            self.configure_containerd_mirror(registry.value, private_registry_addr)
 
     def configure_containerd_credentials(self, creds: DockerCredentials):
         logging.info("Configuring containerd docker credentials")
@@ -309,6 +347,7 @@ class JujuClusterSetup:
             channel=self.channel,
             http_proxy=self.http_proxy,
             creds=self.creds,
+            private_registry=self.private_registry,
         )
         cluster_info = self.form_cluster(self.control_plane_nodes)
         self.save_cluster_info(cluster_info)
@@ -392,6 +431,12 @@ def parse_arguments() -> Namespace:
         type=str,
         help="Docker password to configure containerd with",
     )
+    parser.add_argument(
+        "--private-registry",
+        type=str,
+        default=None,
+        help="Address of the private docker registry in the form of {scheme}://{ip}:{port}",
+    )
     args = parser.parse_args()
     if args.control_plane > args.nodes:
         raise ValueError("--nodes >= --control-plane")
@@ -417,6 +462,7 @@ def main():
             channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
+            private_registry=args.private_registry,
         )
         mgr.setup()
     except KeyboardInterrupt:
