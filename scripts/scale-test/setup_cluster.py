@@ -126,9 +126,12 @@ class JujuClusterSetup:
 
         # [host."http://my.registry.internal:5000"]
         # capabilities = ["pull", "resolve"]
-        commands = []
-        hosts_file = f"/var/snap/microk8s/current/args/certs.d/{registry}/hosts.toml"
-        commands.append(f"rm -rf {hosts_file}")
+        registry_cert_dir = f"/var/snap/microk8s/current/args/certs.d/{registry}"
+        hosts_file = f"{registry_cert_dir}/hosts.toml"
+        commands = [
+            f"rm -rf {hosts_file}",
+            f"mkdir -p {registry_cert_dir}",
+        ]
         lines = [
             f'server = \\"{private_registry_addr}\\"',
             f'[host.\\"{private_registry_addr}\\"]',
