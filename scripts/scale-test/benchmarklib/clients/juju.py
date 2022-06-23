@@ -25,8 +25,12 @@ class JujuSession:
         self.model = model
         self.app = app
 
-    def run_in_unit(self, *command, unit: str, timeout: Optional[str] = None):
-        return run(*command, unit=unit, model=self.model, timeout=timeout)
+    def run_in_unit(
+        self, *command, unit: str, timeout: Optional[str] = None, format=None
+    ):
+        return run(
+            *command, unit=unit, model=self.model, timeout=timeout, format=format
+        )
 
     def run_in_units(self, *command, units: List[str], format=None):
         return run(*command, units=units, model=self.model, format=format)

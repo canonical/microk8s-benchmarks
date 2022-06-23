@@ -53,12 +53,12 @@ class Microk8sCluster:
     def get_master_node(self) -> Unit:
         return self.info.master
 
-    def run_in_unit(self, unit: UnitParam, command: str):
+    def run_in_unit(self, unit: UnitParam, command: str, format=None):
         unit_name = unit
         if isinstance(unit, Unit):
             unit_name = unit.name
 
-        resp = self.juju.run_in_unit(command, unit=unit_name)
+        resp = self.juju.run_in_unit(command, unit=unit_name, format=format)
         try:
             resp.check_returncode()
             return resp
@@ -85,8 +85,8 @@ class Microk8sCluster:
             logging.error(f"Error running {command} on {unit_names}: {stderr}")
             raise ClusterCommandError(command, stdout, stderr) from err
 
-    def run_in_master_node(self, command: str):
-        return self.run_in_unit(self.get_master_node(), command)
+    def run_in_master_node(self, command: str, format=None):
+        return self.run_in_unit(self.get_master_node(), command, format=format)
 
     def create_namespace(self, name: str) -> None:
         logging.info(f"Creating {name} namespace")

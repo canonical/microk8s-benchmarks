@@ -1,4 +1,5 @@
 import itertools
+import logging
 import os
 from typing import Optional
 
@@ -8,7 +9,7 @@ from setup_cluster import JujuClusterSetup
 
 TOTAL_NODES = (5, 10, 20, 40, 60, 80, 100)
 CONTROL_PLANE = (5,)
-CHANNEL = "latest/edge"
+CHANNEL = "latest/stable"
 HTTP_PROXY = "http://squid.internal:3128"
 
 
@@ -50,7 +51,12 @@ def run_benchmark():
             run_experiment(cluster)
 
 
+def configure_logging():
+    logging.root.setLevel(logging.DEBUG)
+
+
 def main():
+    configure_logging()
     run_benchmark()
 
 

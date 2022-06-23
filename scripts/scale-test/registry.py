@@ -325,6 +325,7 @@ def parse_arguments():
     # Push args
     push_parser = subparsers.add_parser("push", help="Push images to the registry")
     group = push_parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--image", type=str, help="An single image to push")
     group.add_argument("--file", type=str, help="Path to images file")
     group.add_argument("--cluster", type=str, help="Path to cluster file")
     group.add_argument(
@@ -345,7 +346,9 @@ def parse_arguments():
 
 
 def push_docker_images(args):
-    if args.file:
+    if args.image:
+        images = [args.image]
+    elif args.file:
         images = get_images_from_file(args.file)
     elif args.cluster:
         images = get_images_from_cluster(args.cluster)

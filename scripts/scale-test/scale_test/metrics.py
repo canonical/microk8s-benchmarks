@@ -1,17 +1,28 @@
-import json
+import logging
+import math
+import statistics
 from typing import List
 
-# from benchmarklib.utils import timeit
 from benchmarklib.cluster import Microk8sCluster
-from benchmarklib.metrics.base import ConstantField, Metric, MultidimensionalField
+from benchmarklib.metrics.base import ConstantField, Metric, ParametrizedField
 
 
-class ClusterMetric(Metric):
-    def __init__(self, name, cluster: Microk8sCluster):
-        super().__init__(name=name)
+class APIServerLatency(Metric):
+    def __init__(self, cluster: Microk8sCluster, metric_server_ip):
+        super().__init__(name="api_server_latency")
         self.cluster = cluster
+        self.add_timestamp_field()
         self.add_field(ConstantField("total_nodes", self.total_nodes))
         self.add_field(ConstantField("control_plane", self.total_control_plane_nodes))
+        self.add_field(
+            ParametrizedField(
+                name="latency(s)",
+                param_name="percentile",
+                params=[50, 95, 99],
+                callable=self.get_latency_percentiles,
+            )
+        )
+        self.metric_server_ip = metric_server_ip
 
     @property
     def total_control_plane_nodes(self) -> int:
@@ -21,69 +32,55 @@ class ClusterMetric(Metric):
     def total_nodes(self) -> int:
         return self.cluster.size
 
-
-class DqliteMemory(ClusterMetric):
-    def __init__(self, cluster: Microk8sCluster):
-        super().__init__(name="dqlite_memory", cluster=cluster)
-        self.add_field(
-            MultidimensionalField(
-                name="memory_KB",
-                param_name="node",
-                params=self.control_plane_nodes,
-                callable=self.get_dqlite_memory,
-            )
-        )
-
-    @property
-    def control_plane_nodes(self) -> List[str]:
-        return [node.name for node in self.cluster.info.control_plane]
-
-    # @timeit("get_dqlite_memory")
-    def get_dqlite_memory(self, unit_names: List[str]) -> List[int]:
+    def get_latency_percentiles(self, percentiles: List[int]):
+        """
+        Calls kube-metrics-server endpoint and parses the apiserver request latency metric samples.
+        From that, it calculates the specified percentiles.
+        """
+        metric_prefix = "apiserver_request_duration_seconds"
         # Run command on all units in parallel
-        command = "pmap -X $(pgrep k8s-dqlite) | tail -n 1 | awk '{print $2}'"
-        resp = self.cluster.run_in_units(unit_names, command, format="json")
-        output = json.loads(resp.stdout.decode())
+        command = f"curl --noproxy '*' https://{self.metric_server_ip}:443/metrics -sk | grep {metric_prefix}"
+        resp = self.cluster.run_in_master_node(command)
+        output = resp.stdout.decode()
 
-        # Parse output
+        buckets = {}
+        total_count = 0
+        for line in output.split("\n"):
+            if metric_prefix not in line:
+                # Ignore
+                continue
+
+            if metric_prefix + "_bucket" in line:
+                bucket = line.split()[0].split("le=")[-1].strip('}"')
+                if bucket == "+Inf":
+                    bucket = math.inf
+                else:
+                    bucket = float(bucket)
+                samples = int(line.split()[-1])
+                buckets.setdefault(bucket, 0)
+                buckets[bucket] += samples
+
+            elif metric_prefix + "_count" in line:
+                count = int(line.split()[-1])
+                total_count += count
+
+        # Calculate derivative of cumulative function
+        prev_bucket = 0
+        latencies = {}
+        for bucket, value in buckets.items():
+            latencies[bucket] = value - prev_bucket
+            prev_bucket = value
+
+        # Simulate samples to calculate quantile
         samples = []
-        for element in output:
-            unit_name = element["UnitId"]
-            value = int(element["Stdout"].strip())
-            samples.append([unit_name, value])
-        return samples
+        for bucket, value in latencies.items():
+            values = [bucket] * value
+            samples.extend(values)
 
-
-class DqliteCPU(ClusterMetric):
-    def __init__(self, cluster: Microk8sCluster):
-        super().__init__(name="dqlite_cpu", cluster=cluster)
-        self.add_field(
-            MultidimensionalField(
-                name="cpu_%",
-                param_name="node",
-                params=self.control_plane_nodes,
-                callable=self.get_dqlite_cpu,
-            )
-        )
-
-    @property
-    def control_plane_nodes(self) -> List[str]:
-        return [node.name for node in self.cluster.info.control_plane]
-
-    # @timeit("get_dqlite_cpu")
-    def get_dqlite_cpu(self, unit_names: List[str]) -> List[int]:
-        # Run command on all units in parallel
-        command = (
-            "top -b -n 2 -d 0.2 -p $(pgrep k8s-dqlite) | tail -1 | awk '{print $9}'"
-        )
-        resp = self.cluster.run_in_units(unit_names, command, format="json")
-        output = json.loads(resp.stdout.decode())
-
-        # Parse output
-        samples = []
-        for element in output:
-            unit_name = element["UnitId"]
-            value = float(element["Stdout"].strip())
-            samples.append([unit_name, value])
-
-        return samples
+        # Return requested percentiles
+        sampled_percentiles = statistics.quantiles(samples, n=101)
+        result = []
+        for perc in percentiles:
+            value = round(sampled_percentiles[perc], 4)
+            result.append([perc, value])
+        return result
