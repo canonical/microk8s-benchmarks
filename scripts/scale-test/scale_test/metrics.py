@@ -1,5 +1,7 @@
+import logging
 import math
 import statistics
+from functools import lru_cache
 from typing import List
 
 from benchmarklib.cluster import Microk8sCluster
@@ -7,7 +9,7 @@ from benchmarklib.metrics.base import ConstantField, Metric, ParametrizedField
 
 
 class APIServerLatency(Metric):
-    def __init__(self, cluster: Microk8sCluster, metric_server_ip):
+    def __init__(self, cluster: Microk8sCluster, metric_server_ip=None):
         super().__init__(name="api_server_latency")
         self.cluster = cluster
         self.add_timestamp_field()
@@ -21,7 +23,13 @@ class APIServerLatency(Metric):
                 callable=self.get_latency_percentiles,
             )
         )
-        self.metric_server_ip = metric_server_ip
+        self._metric_server_ip = metric_server_ip
+
+    @property
+    def metric_server_ip(self):
+        if self._metric_server_ip is None:
+            self._metric_server_ip = get_metric_server_ip(self.cluster)
+        return self._metric_server_ip
 
     @property
     def total_control_plane_nodes(self) -> int:
@@ -83,3 +91,15 @@ class APIServerLatency(Metric):
             value = round(sampled_percentiles[perc], 4)
             result.append([perc, value])
         return result
+
+
+@lru_cache(maxsize=1)
+def get_metric_server_ip(cluster: Microk8sCluster) -> str:
+    logging.info("Fetching metrics server service' ip")
+    command = "microk8s kubectl get svc -A | grep metrics-server | awk '{print $4}'"
+    resp = cluster.run_in_master_node(command)
+    resp.check_returncode()
+    ip = resp.stdout.decode().strip()
+    if ip is None:
+        raise ValueError(f"Could not find ip for metric server")
+    return ip

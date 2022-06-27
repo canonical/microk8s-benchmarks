@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from contextlib import ContextDecorator, contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -76,6 +77,8 @@ class Experiment:
 
             workload.apply(namespace=ns)
 
+            self.wait_for_pods_ready(namespace=ns)
+
             with WorkloadMetrics(
                 workload=workload,
                 metrics=self.get_metrics_for_workload(workload),
@@ -103,6 +106,13 @@ class Experiment:
         if len(self.required_addons) > 0:
             addons = [addon.enable for addon in self.required_addons]
             self.cluster.enable(addons)
+        self.wait_for_pods_ready()
+
+    def wait_for_pods_ready(self, namespace=None):
+        while not self.cluster.pods_ready(namespace=namespace):
+            ns = namespace or "all"
+            logging.info(f"Waiting for pods in {ns} namespace to be ready...")
+            time.sleep(5)
 
     def teardown(self):
         logging.info("Experiment teardown")

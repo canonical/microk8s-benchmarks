@@ -110,3 +110,17 @@ class Microk8sCluster:
         logging.info("Fetching kubectl config from cluster")
         resp = self.run_in_master_node("microk8s config")
         return resp.stdout.decode()
+
+    def pods_ready(self, namespace=None) -> bool:
+        if namespace:
+            resp = kubectl.get("pods", namespace=namespace, format="json")
+        else:
+            resp = kubectl.get("pods", all_namespaces=True, format="json")
+        output = json.loads(resp.stdout)
+        for item in output["items"]:
+            if item["kind"] != "Pod":
+                continue
+            for status in item["status"]["containerStatuses"]:
+                if status["ready"] != True:
+                    return False
+        return True

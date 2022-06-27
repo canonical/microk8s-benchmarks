@@ -44,15 +44,6 @@ def get_cluster_dns_server(cluster: Microk8sCluster) -> str:
     return resp.stdout.decode().strip()
 
 
-@lru_cache(maxsize=1)
-def get_metric_server_ip(cluster: Microk8sCluster) -> str:
-    logging.info("Fetching metrics server service' ip")
-    command = "microk8s kubectl get svc -A | grep metrics-server | awk '{print $4}'"
-    resp = cluster.run_in_master_node(command)
-    resp.check_returncode()
-    return resp.stdout.decode().strip()
-
-
 def run_experiment(cluster: Microk8sCluster):
     # Addons
     dns_server = get_cluster_dns_server(cluster)
@@ -78,8 +69,7 @@ def run_experiment(cluster: Microk8sCluster):
     scaletest.register_workloads([idle])
 
     # Metrics
-    metric_server_ip = get_metric_server_ip(cluster)
-    latency = APIServerLatency(cluster, metric_server_ip)
+    latency = APIServerLatency(cluster)
     scaletest.register_metrics([latency])
 
     scaletest.run()

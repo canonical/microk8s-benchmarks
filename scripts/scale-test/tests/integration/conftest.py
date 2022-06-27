@@ -105,6 +105,12 @@ def all_nodes_joined_mock():
 
 
 @pytest.fixture()
+def pods_ready_mock():
+    with patch("benchmarklib.cluster.Microk8sCluster.pods_ready", return_value=True):
+        yield
+
+
+@pytest.fixture()
 def run_in_master_node_mock():
     metrics = """apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="0.05"} 6
 apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="0.1"} 6
@@ -160,6 +166,7 @@ def experiment_fixtures(
     data_lake,
     temp_dir,
     collector_poll_period,
+    pods_ready_mock,
 ):
     yield
 
