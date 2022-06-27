@@ -105,14 +105,20 @@ def all_nodes_joined_mock():
 
 
 @pytest.fixture()
-def run_in_units_mock():
-    run_in_unit_json_response = [
-        {"Stdout": "382904\n", "UnitId": "microk8s-node/0"},
-        {"Stdout": "335856\n", "UnitId": "microk8s-node/1"},
-    ]
-    return_value = Mock(stdout=json.dumps(run_in_unit_json_response).encode())
+def run_in_master_node_mock():
+    metrics = """apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="0.05"} 6
+apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="0.1"} 6
+apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="0.45"} 6
+apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="60"} 6
+apiserver_request_duration_seconds_bucket{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version="",le="+Inf"} 6
+apiserver_request_duration_seconds_sum{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version=""} 0.001088356
+apiserver_request_duration_seconds_count{component="",dry_run="",group="",resource="",scope="",subresource="/readyz",verb="GET",version=""} 6
+"""  # noqa
+
+    return_value = Mock(stdout=metrics.encode())
     with patch(
-        "scale_test.metrics.Microk8sCluster.run_in_units", return_value=return_value
+        "scale_test.metrics.Microk8sCluster.run_in_master_node",
+        return_value=return_value,
     ):
         yield
 
@@ -146,7 +152,7 @@ def setup_registry_fixtures(
 
 @pytest.fixture()
 def experiment_fixtures(
-    run_in_units_mock,
+    run_in_master_node_mock,
     subprocess_run_mock,
     workload_time,
     cluster_json,

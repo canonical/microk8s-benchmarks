@@ -1,4 +1,3 @@
-import logging
 import math
 import statistics
 from typing import List

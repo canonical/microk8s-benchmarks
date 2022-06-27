@@ -7,7 +7,10 @@ from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
 from setup_cluster import JujuClusterSetup
 
-TOTAL_NODES = (5, 10, 20, 40, 60, 80, 100)
+TOTAL_NODES = (
+    5,
+    10,
+)  # 20, 40, 60, 80, 100)
 CONTROL_PLANE = (5,)
 CHANNEL = "latest/stable"
 HTTP_PROXY = "http://squid.internal:3128"

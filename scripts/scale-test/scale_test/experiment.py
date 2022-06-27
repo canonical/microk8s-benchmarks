@@ -74,7 +74,7 @@ def run_experiment(cluster: Microk8sCluster):
     )
 
     # Workloads
-    idle = IdleWorkload(duration=10)
+    idle = IdleWorkload(duration=WORKLOAD_TIME)
     scaletest.register_workloads([idle])
 
     # Metrics
