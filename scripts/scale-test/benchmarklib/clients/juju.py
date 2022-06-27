@@ -1,10 +1,14 @@
 import json
 import logging
 import subprocess
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
+
+from benchmarklib.models import Unit
 
 JUJU = "/snap/bin/juju"
 JUJU_WAIT = "/snap/bin/juju-wait"
+
+UnitParam = Union[str, Unit]
 
 
 class JujuSession:
@@ -24,16 +28,28 @@ class JujuSession:
     def __init__(self, model: str, app: str):
         self.model = model
         self.app = app
+        self.units: List[Unit] = []
 
     def run_in_unit(
-        self, *command, unit: str, timeout: Optional[str] = None, format=None
+        self, *command, unit: UnitParam, timeout: Optional[str] = None, format=None
     ):
+        if isinstance(unit, Unit):
+            unit = unit.name
         return run(
             *command, unit=unit, model=self.model, timeout=timeout, format=format
         )
 
-    def run_in_units(self, *command, units: List[str], format=None):
-        return run(*command, units=units, model=self.model, format=format)
+    def run_in_units(
+        self,
+        *command,
+        units: List[UnitParam],
+        format=None,
+        timeout: Optional[str] = None,
+    ):
+        units = [unit.name if isinstance(unit, Unit) else unit for unit in units]
+        return run(
+            *command, units=units, model=self.model, format=format, timeout=timeout
+        )
 
     def run_in_all_units(self, *command, timeout: Optional[str] = None):
         return run(*command, app=self.app, model=self.model, timeout=timeout)
@@ -60,14 +76,15 @@ class JujuSession:
         """
         Build the list of ubuntu units from the juju status output
         """
-        units = []
+        self.units = []
         status = json.loads(self.status(format="json").stdout.decode())
         for unit_name, unit_data in status["applications"][self.app]["units"].items():
             ip = unit_data["public-address"]
             machine_id = unit_data["machine"]
             hostname = status["machines"][machine_id]["hostname"]
-            units.append(dict(name=unit_name, instance_id=hostname, ip=ip))
-        return units
+            self.units.append(dict(name=unit_name, instance_id=hostname, ip=ip))
+        self.units = [Unit(**data) for data in self.units]
+        return self.units
 
 
 def _juju(*args):

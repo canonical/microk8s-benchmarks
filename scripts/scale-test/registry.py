@@ -245,7 +245,7 @@ class RegistrySetup:
         return self.get_registry_unit()
 
     def get_registry_unit(self) -> Unit:
-        return Unit(**(self.juju.get_units()[0]))
+        return self.juju.get_units()[0]
 
     def reboot_and_wait(self):
         """

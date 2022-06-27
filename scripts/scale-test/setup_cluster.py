@@ -7,7 +7,6 @@ import time
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from pathlib import Path
-from traceback import walk_stack
 from typing import List, Optional
 
 from benchmarklib.clients.juju import JujuSession
@@ -35,8 +34,6 @@ class JujuClusterSetup:
     def __init__(
         self,
         model: str,
-        total_nodes: int,
-        control_plane_nodes: int,
         channel: str,
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
@@ -46,14 +43,10 @@ class JujuClusterSetup:
         self.app = app
         self.model = model
         self.juju = JujuSession(model=self.model, app=self.app)
-        self.total_nodes = total_nodes
-        self.control_plane_nodes = control_plane_nodes
         self.channel = channel
         self.http_proxy = http_proxy
         self.creds = creds
         self.private_registry = private_registry
-        self.units: List[Unit] = []
-        self.idle_units: List[Unit] = []
         self.cluster_info = None
 
     def install_microk8s(
@@ -62,24 +55,25 @@ class JujuClusterSetup:
         http_proxy: Optional[str] = None,
         creds: Optional[DockerCredentials] = None,
         private_registry: Optional[str] = None,
+        units: Optional[List[Unit]] = None,
     ):
         """
         Installs microk8s snaps on all deployed units.
         It will configure http proxy and containerd settings if specified.
         """
         if http_proxy:
-            self.configure_http_proxy(http_proxy)
-            self.reboot_and_wait()
+            self.configure_http_proxy(http_proxy, units=units)
+            self.reboot_and_wait(units=units)
 
-        self.install_snap(channel)
-        self.update_etc_hosts()
+        self.install_snap(channel, units=units)
+        self.update_etc_hosts(units=units)
 
         if creds or private_registry:
-            self.configure_containerd(creds, private_registry)
+            self.configure_containerd(creds, private_registry, units=units)
 
-        self.wait_microk8s_ready()
+        self.wait_microk8s_ready(units=units)
 
-    def configure_http_proxy(self, http_proxy: str):
+    def configure_http_proxy(self, http_proxy: str, units=None):
         logging.info("Configuring proxy settings on units")
         commands = ";".join(
             [
@@ -94,14 +88,20 @@ class JujuClusterSetup:
                 "echo NO_PROXY=${noproxy} >> /etc/environment",
             ]
         )
-        self.juju.run_in_all_units(commands).check_returncode()
+        if units:
+            self.juju.run_in_units(commands, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(commands).check_returncode()
 
-    def reboot_and_wait(self):
+    def reboot_and_wait(self, units=None):
         """
         Reboots all units in the model and then waits for them to be up.
         """
-        logging.info("Rebooting all units")
-        self.juju.run_in_all_units("reboot", timeout="10s")
+        logging.info("Rebooting units")
+        if units:
+            self.juju.run_in_units("reboot", units=units, timeout="10s")
+        else:
+            self.juju.run_in_all_units("reboot", timeout="10s")
 
         logging.info(f"Waiting for {self.model} model...")
         self.juju.wait_for_model()
@@ -110,18 +110,18 @@ class JujuClusterSetup:
         cmd = "sudo snap restart microk8s.daemon-containerd"
         self.juju.run_in_all_units(cmd).check_returncode()
 
-    def configure_containerd(self, creds, registry_addr):
+    def configure_containerd(self, creds, registry_addr, units):
         """
         Configure docker credentials if specified.
         """
         if creds:
-            self.configure_containerd_credentials(creds)
+            self.configure_containerd_credentials(creds, units=units)
         if registry_addr:
-            self.configure_containerd_registries(registry_addr)
+            self.configure_containerd_registries(registry_addr, units=units)
         if creds or registry_addr:
-            self.restart_containerd()
+            self.restart_containerd(units=units)
 
-    def configure_containerd_mirror(self, registry, private_registry_addr):
+    def configure_containerd_mirror(self, registry, private_registry_addr, units=None):
         logging.info(f"Configuring registry mirror for {registry}")
         # # /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml
         # server = "http://my.registry.internal:5000"
@@ -142,13 +142,18 @@ class JujuClusterSetup:
         for line in lines:
             commands.append(f'echo "{line}" >> {hosts_file}')
         cmd = ";".join(commands)
-        self.juju.run_in_all_units(cmd).check_returncode()
+        if units:
+            self.juju.run_in_units(cmd, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(cmd).check_returncode()
 
-    def configure_containerd_registries(self, private_registry_addr: str):
+    def configure_containerd_registries(self, private_registry_addr: str, units=None):
         for registry in KnownRegistries:
-            self.configure_containerd_mirror(registry.value, private_registry_addr)
+            self.configure_containerd_mirror(
+                registry.value, private_registry_addr, units=units
+            )
 
-    def configure_containerd_credentials(self, creds: DockerCredentials):
+    def configure_containerd_credentials(self, creds: DockerCredentials, units=None):
         logging.info("Configuring containerd docker credentials")
         containerd_file = "/var/snap/microk8s/current/args/containerd-template.toml"
         lines = [
@@ -157,22 +162,28 @@ class JujuClusterSetup:
             f'password = \\"{creds.password}\\"',
         ]
         cmd = ";".join([f'echo "{line}" >> {containerd_file}' for line in lines])
-        self.juju.run_in_all_units(cmd).check_returncode()
+        if units:
+            self.juju.run_in_units(cmd, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(cmd).check_returncode()
 
-    def update_etc_hosts(self):
+    def update_etc_hosts(self, units=None):
         """
         Add entries in /etc/hosts of all units for each node in the cluster.
         This is needed as nodes's hostnames need to be resolvable in order for
         the add-node/join process to work.
         """
         logging.info("Adding units hostnames on /etc/hosts")
+        if not units:
+            units = self.juju.get_units()
+
         command = ";".join(
-            [f"echo {u.ip}\t{u.instance_id} >> /etc/hosts" for u in self.units]
+            [f"echo {u.ip}\t{u.instance_id} >> /etc/hosts" for u in units]
         )
         self.juju.run_in_all_units(command).check_returncode()
 
-    def install_snap(self, channel: str):
-        logging.info("Installing microk8s on all units")
+    def install_snap(self, channel: str, units=None):
+        logging.info("Installing microk8s on units")
         all_commands = [
             f"snap install microk8s --classic --channel={channel}",
             "usermod -a -G microk8s ubuntu",
@@ -180,11 +191,17 @@ class JujuClusterSetup:
             "newgrp microk8s",
         ]
         command = ";".join(all_commands)
-        self.juju.run_in_all_units(command).check_returncode()
+        if units:
+            self.juju.run_in_units(command, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(command).check_returncode()
 
-    def wait_microk8s_ready(self, timeout_min: int = 10):
+    def wait_microk8s_ready(self, timeout_min: int = 10, units=None):
         cmd = f"microk8s status --wait-ready --timeout {timeout_min * 60}"
-        self.juju.run_in_all_units(cmd).check_returncode()
+        if units:
+            self.juju.run_in_units(cmd, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(cmd).check_returncode()
 
     def get_join_cluster_url(self, master: Unit) -> str:
         """
@@ -267,7 +284,7 @@ class JujuClusterSetup:
         return True
 
     def form_cluster(self, control_plane: int) -> ClusterInfo:
-        units = self.units[:]
+        units = self.juju.units[:]
         n_workers = len(units) - control_plane
         logging.info(
             f"Setting up a microk8s cluster: {n_workers} workers and {control_plane} control-plane nodes"
@@ -298,6 +315,15 @@ class JujuClusterSetup:
         self.wait_for_nodes_to_join(cluster, max_wait=10 * 60)
         return cluster
 
+    def add_units(self, n_units: int) -> List[Unit]:
+        logging.info(f"Adding {n_units} more units")
+        existing_units = self.juju.get_units()
+        self.juju.add_units(n_units).check_returncode()
+        self.juju.wait_for_model()
+        all_units = self.juju.get_units()
+        new_units = [unit for unit in all_units if unit not in existing_units]
+        return new_units
+
     def deploy_units(self, n_units: int) -> List[Unit]:
         logging.info(f"Deploying {n_units} ubuntu charm units")
         self.juju.add_model().check_returncode()
@@ -310,7 +336,7 @@ class JujuClusterSetup:
         if replicas > 0:
             self.juju.add_units(replicas).check_returncode()
         self.juju.wait_for_model()
-        self.units = [Unit(**data) for data in self.juju.get_units()]
+        return self.juju.get_units()
 
     def save_cluster_info(self, cluster: ClusterInfo):
         clusters_path = Path.cwd() / ".clusters"
@@ -339,19 +365,20 @@ class JujuClusterSetup:
         finally:
             self.destroy()
 
-    def setup(self) -> Microk8sCluster:
-        worker_nodes = self.total_nodes - self.control_plane_nodes
+    def setup(self, total_nodes, control_plane_nodes) -> Microk8sCluster:
+        worker_nodes = total_nodes - control_plane_nodes
         logging.info(
-            f"Setting up a microk8s (channel={self.channel}) {self.total_nodes}-node cluster (cp={self.control_plane_nodes}, w={worker_nodes})"  # noqa
+            f"Setting up a microk8s (channel={self.channel}) {total_nodes}-node cluster (cp={control_plane_nodes}, w={worker_nodes})"  # noqa
         )
-        self.deploy_units(self.total_nodes)
+        units = self.deploy_units(total_nodes)
         self.install_microk8s(
+            units=units,
             channel=self.channel,
             http_proxy=self.http_proxy,
             creds=self.creds,
             private_registry=self.private_registry,
         )
-        cluster_info = self.form_cluster(self.control_plane_nodes)
+        cluster_info = self.form_cluster(control_plane_nodes)
         self.save_cluster_info(cluster_info)
         self.cluster_info = cluster_info
         return Microk8sCluster(cluster_info)
@@ -362,51 +389,21 @@ class JujuClusterSetup:
         if self.cluster_info:
             self.cleanup_cluster_info(self.cluster_info)
 
-    def reshape(self, target_total: int, target_cp: int):
-        """ """
-        units_diff = self.total_nodes - target_total
-        if units_diff < 0:
-            self.maybe_add_more_units(abs(units_diff))
-
-        # Compute how many we need to add/remove of each kind
-        cp_diff = self.control_plane_nodes - target_cp
-        current_wks = self.total_nodes - self.control_plane_nodes
-        target_wks = target_total - target_cp
-        wks_diff = current_wks - target_wks
-        cp_to_add = abs(max(0, cp_diff))
-        cp_to_rem = abs(min(0, cp_diff))
-        wks_to_add = abs(max(0, wks_diff))
-        wks_to_rem = abs(min(0, wks_diff))
-
-        # Leave nodes first
-        nodes_to_leave = []
-        for _ in range(cp_to_rem):
-            cp = self.cluster_info.control_plane.pop(-1)
-            nodes_to_leave.append(cp)
-        for _ in range(wks_to_rem):
-            wkr = self.cluster_info.workers.pop(-1)
-            nodes_to_leave.append(wkr)
-
-        if len(nodes_to_leave) > 0:
-            self.leave_nodes(nodes_to_leave)
-
-        # Finally add if needed
-        if cp_to_add > 0:
-            self.add_control_plane_nodes(cp_to_add)
-        if wks_to_add > 0:
-            self.add_worker_nodes(wks_to_add)
-
-    def leave_nodes(self, nodes: List[Unit]):
-        # TODO
-        pass
-
-    def add_control_plane_nodes(self, n: int):
-        # TODO
-        pass
-
-    def add_worker_nodes(self, n: int):
-        # TODO
-        pass
+    def add_worker_nodes(self, n_nodes: int):
+        units = self.add_units(n_nodes)
+        self.install_microk8s(
+            units=units,
+            channel=self.channel,
+            http_proxy=self.http_proxy,
+            creds=self.creds,
+            private_registry=self.private_registry,
+        )
+        join_url = self.get_join_cluster_url(self.cluster_info.master)
+        self.join_nodes_to_cluster(units, join_url, as_worker=True)
+        self.cluster_info.workers.append(units)
+        self.wait_for_nodes_to_join(self.cluster_info, max_wait=10 * 60)
+        self.save_cluster_info(self.cluster_info)
+        return self.cluster_info
 
 
 def get_docker_credentials(
@@ -505,14 +502,12 @@ def main():
     try:
         mgr = JujuClusterSetup(
             model=args.model,
-            total_nodes=args.nodes,
-            control_plane_nodes=args.control_plane,
             channel=args.channel,
             http_proxy=args.http_proxy,
             creds=get_docker_credentials(args),
             private_registry=args.private_registry,
         )
-        mgr.setup()
+        mgr.setup(total_nodes=args.nodes, control_plane_nodes=args.control_plane)
     except KeyboardInterrupt:
         logging.info("CTRL+C catched! exiting...")
         error = True

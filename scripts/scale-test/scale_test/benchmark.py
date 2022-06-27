@@ -3,25 +3,13 @@ import logging
 import os
 from typing import Optional
 
+from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.models import DockerCredentials
 from scale_test.experiment import run_experiment
 from setup_cluster import JujuClusterSetup
 
-TOTAL_NODES = (
-    5,
-    10,
-)  # 20, 40, 60, 80, 100)
-CONTROL_PLANE = (5,)
-CHANNEL = "latest/stable"
+CHANNEL = "latest/edge"
 HTTP_PROXY = "http://squid.internal:3128"
-
-
-def valid_cluster_shapes():
-    product = itertools.product(CONTROL_PLANE, TOTAL_NODES)
-    # Filter out shapes where cp < total nodes
-    valid_shapes = [(cp, total) for (cp, total) in product if total >= cp]
-    for shape in sorted(valid_shapes, key=lambda x: (x[1], x[0])):
-        yield shape
 
 
 def get_docker_credentials() -> Optional[DockerCredentials]:
@@ -31,12 +19,11 @@ def get_docker_credentials() -> Optional[DockerCredentials]:
         return None
 
 
-def get_private_registry() -> Optional[str]:
+def get_private_registry() -> str:
     return os.environ.get("REGISTRY")
 
 
 def run_benchmark():
-    cluster_shapes = valid_cluster_shapes()
     mgr = JujuClusterSetup(
         model="scale-test",
         channel=CHANNEL,
@@ -45,16 +32,16 @@ def run_benchmark():
         private_registry=get_private_registry(),
     )
     try:
-        cluster = mgr.setup()
-        while True:
+        cluster = mgr.setup(total_nodes=5, control_plane_nodes=5)
+        for to_add in (0, 5, 10, 20, 20, 20, 20):
+            if to_add > 0:
+                cluster = mgr.add_worker_nodes(to_add)
+            else:
+                continue
             run_experiment(cluster)
-            try:
-                total_nodes, cp_nodes = next(cluster_shapes)
-            except StopIteration:
-                break
-            cluster = mgr.reshape(total_nodes, cp_nodes)
     finally:
-        mgr.destroy()
+        # mgr.destroy()
+        pass
 
 
 def configure_logging():
