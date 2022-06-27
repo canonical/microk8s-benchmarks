@@ -101,5 +101,5 @@ def get_metric_server_ip(cluster: Microk8sCluster) -> str:
     resp.check_returncode()
     ip = resp.stdout.decode().strip()
     if ip is None:
-        raise ValueError(f"Could not find ip for metric server")
+        raise ValueError("Could not find ip for metric server")
     return ip

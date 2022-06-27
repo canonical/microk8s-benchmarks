@@ -116,11 +116,13 @@ class Microk8sCluster:
             resp = kubectl.get("pods", namespace=namespace, format="json")
         else:
             resp = kubectl.get("pods", all_namespaces=True, format="json")
+
         output = json.loads(resp.stdout)
         for item in output["items"]:
             if item["kind"] != "Pod":
+                # Skip kind
                 continue
             for status in item["status"]["containerStatuses"]:
-                if status["ready"] != True:
+                if status["ready"] is False:
                     return False
         return True
