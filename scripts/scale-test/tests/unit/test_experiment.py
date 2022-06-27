@@ -11,7 +11,7 @@ from benchmarklib.experiment import Experiment, fetch_kubeconfig
 @patch("benchmarklib.experiment.fetch_kubeconfig", autospec=True)
 @patch("benchmarklib.experiment.Experiment.teardown")
 def test_run_calls_teardown_on_graceful_exit(_teardown, _fetch_kubeconfig):
-    exp = Experiment("foo", None)
+    exp = Experiment("foo", Mock())
 
     exp.run()
 
@@ -22,7 +22,7 @@ def test_run_calls_teardown_on_graceful_exit(_teardown, _fetch_kubeconfig):
 @patch("benchmarklib.experiment.Experiment.teardown")
 @patch("benchmarklib.experiment.Experiment.start")
 def test_run_calls_teardown_on_exception(_start, _teardown, _fetch_kubeconfig):
-    exp = Experiment("foo", None)
+    exp = Experiment("foo", Mock())
 
     # Unhandled exception
     _start.side_effect = Exception()

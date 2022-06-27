@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from benchmarklib.metrics.base import (
     ConstantField,
     Metric,
-    MultidimensionalField,
+    ParametrizedField,
     VariableField,
 )
 
@@ -33,7 +33,7 @@ class MetricWithMultiD(Metric):
         super().__init__(name)
         self.add_field(ConstantField("foo", 10))
         self.add_field(
-            MultidimensionalField(
+            ParametrizedField(
                 "cpu", param_name="param", params=[50, 30], callable=multid_callable
             )
         )
@@ -85,7 +85,7 @@ def test_dump_appends(temp_dir):
 def test_metric_with_multiple_multid_fields():
     metric = MetricWithMultiD(name="multid")
     metric.add_field(
-        MultidimensionalField(
+        ParametrizedField(
             "other",
             param_name="param2",
             params=[100, 200],
@@ -135,7 +135,7 @@ def test_variable_field():
 
 
 def test_multid_field():
-    field = MultidimensionalField(
+    field = ParametrizedField(
         "foo", param_name="myparam", params=[1, 2, 3], callable=multid_callable
     )
 

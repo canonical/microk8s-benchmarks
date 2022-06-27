@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from contextlib import ContextDecorator, contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ class Experiment:
         name: str,
         cluster: Microk8sCluster,
         required_addons: Optional[List[Addon]] = None,
+        skip_teardown: bool = False,
     ):
         self.name = name
         self.required_addons = required_addons or []
@@ -32,6 +34,7 @@ class Experiment:
         self.workloads: List[Workload] = []
         self.all_workloads_metrics: List[Metric] = []
         self.workload_metrics: Dict[Workload, List[Metric]] = {}
+        self.skip_teardown = skip_teardown
 
     def register_workloads(self, workloads, metrics: Optional[List[Metric]] = None):
         """
@@ -74,6 +77,8 @@ class Experiment:
 
             workload.apply(namespace=ns)
 
+            self.wait_for_pods_ready(namespace=ns)
+
             with WorkloadMetrics(
                 workload=workload,
                 metrics=self.get_metrics_for_workload(workload),
@@ -101,9 +106,16 @@ class Experiment:
         if len(self.required_addons) > 0:
             addons = [addon.enable for addon in self.required_addons]
             self.cluster.enable(addons)
+        self.wait_for_pods_ready()
+
+    def wait_for_pods_ready(self, namespace=None):
+        while not self.cluster.pods_ready(namespace=namespace):
+            ns = namespace or "all"
+            logging.info(f"Waiting for pods in {ns} namespace to be ready...")
+            time.sleep(5)
 
     def teardown(self):
-        logging.info("Cluster teardown")
+        logging.info("Experiment teardown")
         if len(self.required_addons) > 0:
             addons = [addon.disable for addon in self.required_addons]
             self.cluster.disable(addons)
@@ -116,7 +128,8 @@ class Experiment:
             except KeyboardInterrupt:
                 logging.info("Experiment cancelled! Tearing down cluster...")
             finally:
-                self.teardown()
+                if not self.skip_teardown:
+                    self.teardown()
 
 
 class WorkloadMetrics(MetricsCollector):
@@ -132,7 +145,7 @@ class WorkloadMetrics(MetricsCollector):
 
     @property
     def workload_id(self):
-        return str(self.workload.yaml)
+        return str(self.workload.name)
 
     def __enter__(self):
         # Inject a field (new column in the metric csv file) to specify

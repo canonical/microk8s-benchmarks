@@ -1,6 +1,7 @@
 import abc
 import csv
 import itertools
+import time
 from pathlib import Path
 from typing import Any, List
 
@@ -40,7 +41,7 @@ class VariableField(Field):
         return self.callable()
 
 
-class MultidimensionalField(Field):
+class ParametrizedField(Field):
     """
     To be used for measurements that need a parameter.
 
@@ -51,7 +52,7 @@ class MultidimensionalField(Field):
     >>>    ...
 
     >>> nodes = ["node1", "node2"]
-    >>> field = MultidimensionalField("memory", param_name="node", params=nodes, callable=get_memory_usage)
+    >>> field = ParametrizedField("memory", param_name="node", params=nodes, callable=get_memory_usage)
     >>> m = Metric("mymetric")
     >>> m.add_field(field)
     >>> m.sample()
@@ -109,10 +110,15 @@ class Metric:
     def add_field(self, field: Field):
         self.fields.append(field)
 
+    def add_timestamp_field(self):
+        self.add_field(
+            VariableField(name="timestamp", callable=lambda: int(time.time()))
+        )
+
     def collect_fields(self) -> List[Sample]:
         samples = []
         for field in self.fields:
-            if isinstance(field, MultidimensionalField):
+            if isinstance(field, ParametrizedField):
                 # Collect all values for each param, and
                 # extend the existing samples with them.
                 param_values = field.collect()
@@ -136,7 +142,7 @@ class Metric:
     def field_names(self) -> List[str]:
         names = []
         for field in self.fields:
-            if isinstance(field, MultidimensionalField):
+            if isinstance(field, ParametrizedField):
                 names.append(field.param_name)
                 names.append(field.name)
             else:

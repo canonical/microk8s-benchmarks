@@ -44,3 +44,11 @@ class Workload:
                 break
             logging.info(f"Waiting for {self}... {pp_time(remaining)} left")
             time.sleep(self.poll_period)
+
+
+class IdleWorkload(Workload):
+    def __init__(self, duration):
+        super().__init__(yaml=None, name="idle", duration=duration)
+
+    def apply(self, namespace=None):
+        logging.info("Idle workload. Nothing to do...")
