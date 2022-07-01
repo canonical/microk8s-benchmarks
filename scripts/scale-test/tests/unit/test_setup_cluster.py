@@ -20,8 +20,6 @@ from setup_cluster import (
 def juju_cluster_setup():
     return JujuClusterSetup(
         model="foo",
-        total_nodes=2,
-        control_plane_nodes=1,
         channel="latest/edge",
         http_proxy="http://proxy.com",
         creds=DockerCredentials(username="foo", password="bar"),
@@ -97,7 +95,7 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
     # Try with 1/2 control plane nodes
     units = [master_node, other_node]
     mgr = juju_cluster_setup()
-    mgr.units = units
+    mgr.juju.units = units
 
     cluster = mgr.form_cluster(1)
 
@@ -113,7 +111,7 @@ def test_setup_cluster_joins_correct_number_of_worker_nodes(
     # Try now with 2/3 control planes nodes
     units = [master_node, other_node, third_node]
     mgr = juju_cluster_setup()
-    mgr.units = units
+    mgr.juju.units = units
     cluster = mgr.form_cluster(2)
 
     _join_nodes_to_cluster.assert_has_calls(
@@ -133,7 +131,7 @@ def test_join_nodes_to_cluster(_juju):
     mgr.join_nodes_to_cluster([node], join_url)
 
     mgr.juju.run_in_units.assert_called_once_with(
-        f"microk8s join {join_url}", units=[node.name]
+        f"microk8s join {join_url}", units=[node.name], format="json"
     )
 
 
@@ -146,7 +144,7 @@ def test_join_nodes_to_cluster_as_worker(_juju):
     mgr.join_nodes_to_cluster([node], join_url, as_worker=True)
 
     mgr.juju.run_in_units.assert_called_once_with(
-        f"microk8s join {join_url} --worker", units=[node.name]
+        f"microk8s join {join_url} --worker", units=[node.name], format="json"
     )
 
 
@@ -184,7 +182,7 @@ def test_install_microk8s_configures_containerd_iif_provided(
 
     mgr.install_microk8s(units, creds=creds)
 
-    mgr.configure_containerd.assert_called_once_with(creds, None)
+    mgr.configure_containerd.assert_called_once_with(creds, None, units=None)
 
 
 @patch("setup_cluster.JujuClusterSetup.wait_microk8s_ready")
@@ -207,7 +205,7 @@ def test_install_microk8s_configures_http_proxy_iif_provided(
 
     http_proxy = "http://proxy:3128"
     mgr.install_microk8s("", http_proxy=http_proxy)
-    mgr.configure_http_proxy.assert_called_once_with(http_proxy)
+    mgr.configure_http_proxy.assert_called_once_with(http_proxy, units=None)
     mgr.reboot_and_wait.assert_called_once()
 
 

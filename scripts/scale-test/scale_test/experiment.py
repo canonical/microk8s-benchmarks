@@ -45,6 +45,11 @@ def get_cluster_dns_server(cluster: Microk8sCluster) -> str:
 
 
 def run_experiment(cluster: Microk8sCluster):
+    scaletest = setup_experiment(cluster)
+    scaletest.run()
+
+
+def setup_experiment(cluster):
     # Addons
     dns_server = get_cluster_dns_server(cluster)
     dns = Addon(name="dns", enable_arg=dns_server)
@@ -58,7 +63,7 @@ def run_experiment(cluster: Microk8sCluster):
 
     # Experiment
     scaletest = Experiment(
-        "scale-test",
+        "scaletest",
         cluster=cluster,
         required_addons=required_addons,
         skip_teardown=True,
@@ -72,7 +77,7 @@ def run_experiment(cluster: Microk8sCluster):
     latency = APIServerLatency(cluster)
     scaletest.register_metrics([latency])
 
-    scaletest.run()
+    return scaletest
 
 
 def main():

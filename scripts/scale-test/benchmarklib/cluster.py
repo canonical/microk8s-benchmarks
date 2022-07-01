@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import subprocess
+from contextlib import ContextDecorator
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -82,7 +84,7 @@ class Microk8sCluster:
         except subprocess.CalledProcessError as err:
             stderr = resp.stderr.decode().strip()
             stdout = resp.stdout.decode()
-            logging.error(f"Error running {command} on {unit_names}: {stderr}")
+            logging.error(f"Error running {command} on {unit_names}: {stdout} {stderr}")
             raise ClusterCommandError(command, stdout, stderr) from err
 
     def run_in_master_node(self, command: str, format=None):
@@ -126,3 +128,60 @@ class Microk8sCluster:
                 if status["ready"] is False:
                     return False
         return True
+
+
+class fetch_kubeconfig(ContextDecorator):
+    """
+    This context manager handles fetching kube config from the provided cluster.
+    Then it sets the KUBECONFIG env variable so that all kubectl commands executed
+    are pointing to the right cluster config.
+    """
+
+    def __init__(
+        self, cluster: Microk8sCluster, config: Optional[Path] = None, cleanup=True
+    ):
+        self.cluster = cluster
+        self._config_file = config
+        self.cleanup = cleanup
+
+    def __enter__(self):
+        if not self.kubeconfig_exists():
+            self.fetch_kubeconfig_from_cluster()
+        self.set()
+        return self
+
+    def __exit__(self, *exc):
+        if self.cleanup:
+            self.cleanup_kubeconfig()
+        self.unset()
+
+    def set(self):
+        os.environ["KUBECONFIG"] = str(self.config_file)
+
+    def unset(self):
+        os.environ.pop("KUBECONFIG", None)
+
+    def kubeconfig_exists(self) -> bool:
+        return self.config_file.exists()
+
+    @property
+    def config_file(self) -> Path:
+        if self._config_file is None:
+            # Store it in default k8s config folder
+            model = self.cluster.info.model
+            self._config_file = Path.home() / ".kube" / f"config_{model}"
+        return self._config_file
+
+    def fetch_kubeconfig_from_cluster(self):
+        cluster_kubeconfig = self.cluster.fetch_kubeconfig()
+        if not self.config_file.parent.exists():
+            os.mkdir(self.config_file.parent)
+
+        with open(self.config_file, mode="w") as f:
+            f.write(cluster_kubeconfig)
+
+    def cleanup_kubeconfig(self) -> None:
+        try:
+            os.unlink(self.config_file)
+        except FileNotFoundError:
+            pass

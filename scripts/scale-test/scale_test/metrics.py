@@ -1,11 +1,18 @@
 import logging
 import math
 import statistics
+import time
 from functools import lru_cache
 from typing import List
 
-from benchmarklib.cluster import Microk8sCluster
-from benchmarklib.metrics.base import ConstantField, Metric, ParametrizedField
+from benchmarklib.cluster import Microk8sCluster, fetch_kubeconfig
+from benchmarklib.metrics.base import (
+    ConstantField,
+    Metric,
+    ParametrizedField,
+    VariableField,
+)
+from benchmarklib.utils import timeit
 
 
 class APIServerLatency(Metric):
@@ -13,7 +20,7 @@ class APIServerLatency(Metric):
         super().__init__(name="api_server_latency")
         self.cluster = cluster
         self.add_timestamp_field()
-        self.add_field(ConstantField("total_nodes", self.total_nodes))
+        self.add_field(VariableField("total_nodes", self.total_nodes))
         self.add_field(ConstantField("control_plane", self.total_control_plane_nodes))
         self.add_field(
             ParametrizedField(
@@ -35,9 +42,35 @@ class APIServerLatency(Metric):
     def total_control_plane_nodes(self) -> int:
         return len(self.cluster.info.control_plane)
 
-    @property
     def total_nodes(self) -> int:
         return self.cluster.size
+
+    @timeit("polling metrics server")
+    def poll_metrics(self, metric_prefix):
+        # Run command on all units in parallel
+        command = f"curl --noproxy '*' https://{self.metric_server_ip}:443/metrics -sk | grep {metric_prefix}"
+        resp = self.cluster.run_in_master_node(command)
+        return resp.stdout.decode()
+
+    def restart_metrics_server(self):
+        logging.info("Restarting metrics server")
+        commands = [
+            "microk8s kubectl scale deploy -n kube-system metrics-server --replicas=0",
+            "microk8s kubectl scale deploy -n kube-system metrics-server --replicas=1",
+        ]
+        resp = self.cluster.run_in_master_node(";".join(commands))
+        resp.check_returncode()
+
+        with fetch_kubeconfig(self.cluster):
+            max_tries = 30
+            tries = 0
+            while (
+                not self.cluster.pods_ready(namespace="kube-system")
+                and tries < max_tries
+            ):
+                logging.info("Waiting for metrics server to be up")
+                time.sleep(5)
+                tries += 1
 
     def get_latency_percentiles(self, percentiles: List[int]):
         """
@@ -45,11 +78,7 @@ class APIServerLatency(Metric):
         From that, it calculates the specified percentiles.
         """
         metric_prefix = "apiserver_request_duration_seconds"
-        # Run command on all units in parallel
-        command = f"curl --noproxy '*' https://{self.metric_server_ip}:443/metrics -sk | grep {metric_prefix}"
-        resp = self.cluster.run_in_master_node(command)
-        output = resp.stdout.decode()
-
+        output = self.poll_metrics(metric_prefix)
         buckets = {}
         total_count = 0
         for line in output.split("\n"):

@@ -1,7 +1,7 @@
 import abc
 import csv
 import itertools
-import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, List
 
@@ -112,7 +112,7 @@ class Metric:
 
     def add_timestamp_field(self):
         self.add_field(
-            VariableField(name="timestamp", callable=lambda: int(time.time()))
+            VariableField(name="timestamp", callable=lambda: datetime.now().isoformat())
         )
 
     def collect_fields(self) -> List[Sample]:

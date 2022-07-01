@@ -1,12 +1,11 @@
 import logging
-import os
 import time
-from contextlib import ContextDecorator, contextmanager
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from benchmarklib.cluster import Microk8sCluster
+from benchmarklib.cluster import Microk8sCluster, fetch_kubeconfig
 from benchmarklib.metrics.base import ConstantField, Metric
 from benchmarklib.metrics.collector import MetricsCollector
 from benchmarklib.models import Addon
@@ -159,46 +158,3 @@ class WorkloadMetrics(MetricsCollector):
         # Cleanup workload field
         for metric in self.metrics:
             metric.remove_field(self.workload_field)
-
-
-class fetch_kubeconfig(ContextDecorator):
-    """
-    This context manager handles fetching kube config from the provided cluster.
-    Then it sets the KUBECONFIG env variable so that all kubectl commands executed
-    are pointing to the right cluster config.
-    """
-
-    def __init__(self, cluster: Microk8sCluster, config: Optional[Path] = None):
-        self.cluster = cluster
-        self._config_file = config
-
-    def __enter__(self):
-        self.fetch_kubeconfig_from_cluster()
-        os.environ["KUBECONFIG"] = str(self.config_file)
-        return self
-
-    def __exit__(self, *exc):
-        self.cleanup_kubeconfig()
-        os.environ.pop("KUBECONFIG", None)
-
-    @property
-    def config_file(self) -> Path:
-        if self._config_file is None:
-            # Store it in default k8s config folder
-            model = self.cluster.info.model
-            self._config_file = Path.home() / ".kube" / f"config_{model}"
-        return self._config_file
-
-    def fetch_kubeconfig_from_cluster(self):
-        cluster_kubeconfig = self.cluster.fetch_kubeconfig()
-        if not self.config_file.parent.exists():
-            os.mkdir(self.config_file.parent)
-
-        with open(self.config_file, mode="w") as f:
-            f.write(cluster_kubeconfig)
-
-    def cleanup_kubeconfig(self) -> None:
-        try:
-            os.unlink(self.config_file)
-        except FileNotFoundError:
-            pass

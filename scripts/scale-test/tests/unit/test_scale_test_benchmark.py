@@ -1,12 +1,7 @@
 import os
 
 from benchmarklib.models import DockerCredentials
-from scale_test.benchmark import get_docker_credentials, valid_cluster_shapes
-
-
-def test_valid_cluster_shapes():
-    for control_plane, total in valid_cluster_shapes():
-        assert total >= control_plane
+from scale_test.benchmark import get_docker_credentials
 
 
 def test_get_docker_credentials():

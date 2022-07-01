@@ -7,6 +7,7 @@ import time
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from pathlib import Path
+from subprocess import CalledProcessError
 from typing import List, Optional
 
 from benchmarklib.clients.juju import JujuSession
@@ -24,6 +25,10 @@ DEFAULT_CHANNEL = "1.24/stable"
 LOG_FORMAT = "[%(asctime)s] [%(levelname)8s] --- %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, datefmt=LOG_DATEFMT)
+
+
+class JoinNodesError(Exception):
+    ...
 
 
 class JujuClusterSetup:
@@ -106,9 +111,12 @@ class JujuClusterSetup:
         logging.info(f"Waiting for {self.model} model...")
         self.juju.wait_for_model()
 
-    def restart_containerd(self):
+    def restart_containerd(self, units=None):
         cmd = "sudo snap restart microk8s.daemon-containerd"
-        self.juju.run_in_all_units(cmd).check_returncode()
+        if units:
+            self.juju.run_in_units(cmd, units=units).check_returncode()
+        else:
+            self.juju.run_in_all_units(cmd).check_returncode()
 
     def configure_containerd(self, creds, registry_addr, units):
         """
@@ -192,9 +200,14 @@ class JujuClusterSetup:
         ]
         command = ";".join(all_commands)
         if units:
-            self.juju.run_in_units(command, units=units).check_returncode()
+            resp = self.juju.run_in_units(command, units=units)
         else:
-            self.juju.run_in_all_units(command).check_returncode()
+            resp = self.juju.run_in_all_units(command)
+        try:
+            resp.check_returncode()
+        except CalledProcessError:
+            logging.error(f"Error installing snap: {resp.stderr.decode()}")
+            raise
 
     def wait_microk8s_ready(self, timeout_min: int = 10, units=None):
         cmd = f"microk8s status --wait-ready --timeout {timeout_min * 60}"
@@ -213,8 +226,10 @@ class JujuClusterSetup:
         return f"{master.ip}:25000/{DEFAULT_ADD_NODE_TOKEN}"
 
     def join_nodes_to_cluster(
-        self, nodes: List[Unit], join_url: str, as_worker: bool = False
+        self, nodes: List[Unit], join_url: str, as_worker: bool = False, retries=0
     ):
+        nodes_by_name = {node.name: node for node in nodes}
+
         nodes = [node.name for node in nodes]
         join_command = f"microk8s join {join_url}"
         if as_worker:
@@ -222,9 +237,27 @@ class JujuClusterSetup:
             logging.info(f"Joining worker nodes to cluster: {nodes}")
         else:
             logging.info(f"Joining control plane nodes to cluster: {nodes}")
-        resp = self.juju.run_in_units(join_command, units=nodes)
+
+        resp = self.juju.run_in_units(join_command, units=nodes, format="json")
         resp.check_returncode()
         logging.debug(f"Join output: {resp.stdout.decode()[:1000]}")
+        output = json.loads(resp.stdout)
+        failed = []
+        for item in output:
+            if item.get("ReturnCode", 0) != 0:
+                unit_name = item["UnitId"]
+                failed_node = nodes_by_name[unit_name]
+                failed.append(failed_node)
+
+        if len(failed) > 0:
+            # Retry...
+            if retries >= 5:
+                raise JoinNodesError(f"Some nodes could not join the cluster: {output}")
+            logging.warning(f"Retry joining nodes...: {failed}")
+            time.sleep(5)
+            self.join_nodes_to_cluster(
+                failed, join_url, as_worker=as_worker, retries=retries + 1
+            )
 
     def wait_for_nodes_to_join(self, cluster: ClusterInfo, max_wait: int = 5 * 60):
         logging.info("Waiting for nodes to join the cluster...")
@@ -365,7 +398,7 @@ class JujuClusterSetup:
         finally:
             self.destroy()
 
-    def setup(self, total_nodes, control_plane_nodes) -> Microk8sCluster:
+    def setup(self, total_nodes=1, control_plane_nodes=1) -> Microk8sCluster:
         worker_nodes = total_nodes - control_plane_nodes
         logging.info(
             f"Setting up a microk8s (channel={self.channel}) {total_nodes}-node cluster (cp={control_plane_nodes}, w={worker_nodes})"  # noqa
@@ -400,7 +433,7 @@ class JujuClusterSetup:
         )
         join_url = self.get_join_cluster_url(self.cluster_info.master)
         self.join_nodes_to_cluster(units, join_url, as_worker=True)
-        self.cluster_info.workers.append(units)
+        self.cluster_info.workers.extend(units)
         self.wait_for_nodes_to_join(self.cluster_info, max_wait=10 * 60)
         self.save_cluster_info(self.cluster_info)
         return self.cluster_info

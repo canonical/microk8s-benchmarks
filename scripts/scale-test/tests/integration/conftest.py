@@ -10,41 +10,24 @@ from benchmarklib.clients.juju import JujuSession
 from benchmarklib.metrics import collector
 from benchmarklib.models import ClusterInfo, Unit
 from scale_test import experiment
+from tests.unit.utils import get_unit
 
-
-def test_juju_status_output():
-    return {
-        "machines": {
-            "0": {"hostname": "juju-c6c89a-0"},
-            "1": {"hostname": "juju-c6c89a-1"},
-        },
-        "applications": {
-            "registry": {
-                "units": {
-                    "registry/0": {"machine": "0", "public-address": "10.246.154.108"}
-                }
-            },
-            "microk8s-node": {
-                "units": {
-                    "microk8s-node/0": {
-                        "machine": "0",
-                        "public-address": "10.246.154.108",
-                    },
-                    "microk8s-node/1": {
-                        "machine": "1",
-                        "public-address": "10.246.154.111",
-                    },
-                }
-            },
-        },
-    }
+UNITS = [get_unit()]
 
 
 @pytest.fixture()
-def juju_status_mock():
-    with patch.object(JujuSession, "status") as _status:
-        _status().stdout = json.dumps(test_juju_status_output()).encode()
-        yield _status
+def juju_get_units_mock():
+    def get_units(self):
+        global UNITS
+
+        cpy = UNITS[:]
+        UNITS.append(get_unit())
+
+        self.units = cpy
+        return cpy
+
+    with patch.object(JujuSession, "get_units", new=get_units) as _get_units:
+        yield _get_units
 
 
 @pytest.fixture()
@@ -131,7 +114,7 @@ apiserver_request_duration_seconds_count{component="",dry_run="",group="",resour
 
 @pytest.fixture()
 def setup_cluster_fixtures(
-    juju_status_mock, subprocess_run_mock, all_nodes_joined_mock, path_cwd_mock
+    juju_get_units_mock, subprocess_run_mock, all_nodes_joined_mock, path_cwd_mock
 ):
     yield
 
