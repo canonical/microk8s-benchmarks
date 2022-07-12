@@ -5,12 +5,12 @@ global:
 
 jobs:
   - name: api-intensive
-    jobIterations: 300
-    qps: 5
-    burst: 5
+    jobIterations: 700
+    qps: 4
+    burst: 4
     namespacedIterations: true
     namespace: api-intensive
-    podWait: true
+    podWait: false
     cleanup: true
     waitFor: []
     waitWhenFinished: true

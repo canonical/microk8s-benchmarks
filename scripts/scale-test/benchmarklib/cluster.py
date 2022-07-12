@@ -55,14 +55,19 @@ class Microk8sCluster:
     def get_master_node(self) -> Unit:
         return self.info.master
 
-    def run_in_unit(self, unit: UnitParam, command: str, format=None):
+    def run_in_unit(
+        self, unit: UnitParam, command: str, format=None, timeout=None, check=True
+    ):
         unit_name = unit
         if isinstance(unit, Unit):
             unit_name = unit.name
 
-        resp = self.juju.run_in_unit(command, unit=unit_name, format=format)
+        resp = self.juju.run_in_unit(
+            command, unit=unit_name, format=format, timeout=timeout
+        )
         try:
-            resp.check_returncode()
+            if check:
+                resp.check_returncode()
             return resp
         except subprocess.CalledProcessError as err:
             stderr = resp.stderr.decode().strip()
@@ -87,8 +92,10 @@ class Microk8sCluster:
             logging.error(f"Error running {command} on {unit_names}: {stdout} {stderr}")
             raise ClusterCommandError(command, stdout, stderr) from err
 
-    def run_in_master_node(self, command: str, format=None):
-        return self.run_in_unit(self.get_master_node(), command, format=format)
+    def run_in_master_node(self, command: str, format=None, timeout=None, check=True):
+        return self.run_in_unit(
+            self.get_master_node(), command, format=format, timeout=timeout, check=check
+        )
 
     def create_namespace(self, name: str) -> None:
         logging.info(f"Creating {name} namespace")
@@ -145,8 +152,7 @@ class fetch_kubeconfig(ContextDecorator):
         self.cleanup = cleanup
 
     def __enter__(self):
-        if not self.kubeconfig_exists():
-            self.fetch_kubeconfig_from_cluster()
+        self.fetch_kubeconfig_from_cluster()
         self.set()
         return self
 

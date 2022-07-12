@@ -54,11 +54,11 @@ def setup_experiment(cluster):
     dns_server = get_cluster_dns_server(cluster)
     dns = Addon(name="dns", enable_arg=dns_server)
     hostpath = Addon(name="hostpath-storage", disable_arg="destroy-storage")
-    metrics_server = Addon(name="metrics-server")
+    observability = Addon(name="observability")
     required_addons = [
         dns,
         hostpath,
-        metrics_server,
+        # observability,
     ]
 
     # Experiment
@@ -68,14 +68,6 @@ def setup_experiment(cluster):
         required_addons=required_addons,
         skip_teardown=True,
     )
-
-    # Workloads
-    idle = IdleWorkload(duration=WORKLOAD_TIME)
-    scaletest.register_workloads([idle])
-
-    # Metrics
-    latency = APIServerLatency(cluster)
-    scaletest.register_metrics([latency])
 
     return scaletest
 

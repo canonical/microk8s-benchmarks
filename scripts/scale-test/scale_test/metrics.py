@@ -1,11 +1,10 @@
-import logging
+import json
 import math
 import statistics
-import time
-from functools import lru_cache
+from contextlib import contextmanager
 from typing import List
 
-from benchmarklib.cluster import Microk8sCluster, fetch_kubeconfig
+from benchmarklib.cluster import Microk8sCluster
 from benchmarklib.metrics.base import (
     ConstantField,
     Metric,
@@ -16,7 +15,7 @@ from benchmarklib.utils import timeit
 
 
 class APIServerLatency(Metric):
-    def __init__(self, cluster: Microk8sCluster, metric_server_ip=None):
+    def __init__(self, cluster: Microk8sCluster, apiserver_api=None):
         super().__init__(name="api_server_latency")
         self.cluster = cluster
         self.add_timestamp_field()
@@ -26,17 +25,15 @@ class APIServerLatency(Metric):
             ParametrizedField(
                 name="latency(s)",
                 param_name="percentile",
-                params=[50, 95, 99],
+                params=[50, 90, 95, 99],
                 callable=self.get_latency_percentiles,
             )
         )
-        self._metric_server_ip = metric_server_ip
-
-    @property
-    def metric_server_ip(self):
-        if self._metric_server_ip is None:
-            self._metric_server_ip = get_metric_server_ip(self.cluster)
-        return self._metric_server_ip
+        self.add_field(VariableField("total_requests", self.get_total_requests))
+        self._metric_server_ip = apiserver_api
+        self._checkpoint_buckets = {}
+        self._checkpoint_requests = 0
+        self._last_total_requests = 0
 
     @property
     def total_control_plane_nodes(self) -> int:
@@ -45,90 +42,99 @@ class APIServerLatency(Metric):
     def total_nodes(self) -> int:
         return self.cluster.size
 
-    @timeit("polling metrics server")
-    def poll_metrics(self, metric_prefix):
-        # Run command on all units in parallel
-        command = f"curl --noproxy '*' https://{self.metric_server_ip}:443/metrics -sk | grep {metric_prefix}"
-        resp = self.cluster.run_in_master_node(command)
-        return resp.stdout.decode()
+    def get_total_requests(self):
+        return self._last_total_requests - self._checkpoint_requests
 
-    def restart_metrics_server(self):
-        logging.info("Restarting metrics server")
+    def checkpoint(self):
+        metrics = self.poll_metrics()
+        buckets = self.get_buckets(metrics)
+        self._checkpoint_buckets = {k: v for k, v in buckets.items()}
+        self._checkpoint_requests = sum(list(buckets.values()))
+
+    @timeit("polling apiserver")
+    def poll_metrics(self):
+        metric_prefix = "apiserver_request_duration_seconds"
         commands = [
-            "microk8s kubectl scale deploy -n kube-system metrics-server --replicas=0",
-            "microk8s kubectl scale deploy -n kube-system metrics-server --replicas=1",
+            "apiserver=$(microk8s.kubectl get svc -n default | grep kubernetes | awk '{print $3}')",
+            "token=$(cat /var/snap/microk8s/current/credentials/known_tokens.csv | grep admin | awk --field-separator=\",\" '{print $1}')",
+            "cert=/var/snap/microk8s/current/certs/ca.crt",
+            f'curl --noproxy "*" https://$apiserver:443/metrics -sk -H "Authorization: Bearer $token" --cacert $cert | grep {metric_prefix}',
         ]
-        resp = self.cluster.run_in_master_node(";".join(commands))
-        resp.check_returncode()
+        command = ";".join(commands)
+        cp_nodes = self.cluster.info.control_plane
+        resp = self.cluster.run_in_units(cp_nodes, command, format="json")
+        unit_responses = json.loads(resp.stdout)
+        all_apiserver_responses = ""
+        for resp in unit_responses:
+            all_apiserver_responses += resp["Stdout"]
+        return all_apiserver_responses
 
-        with fetch_kubeconfig(self.cluster):
-            max_tries = 30
-            tries = 0
-            while (
-                not self.cluster.pods_ready(namespace="kube-system")
-                and tries < max_tries
-            ):
-                logging.info("Waiting for metrics server to be up")
-                time.sleep(5)
-                tries += 1
+    def get_buckets(self, output):
+        buckets = {}
+        for line in output.split("\n"):
+            if "_bucket" not in line:
+                continue
+
+            if 'verb="WATCH"' in line:
+                # Skip those requests as they are polluting results
+                continue
+
+            bucket = line.split()[0].split("le=")[-1].strip('}"')
+            if bucket == "+Inf":
+                bucket = math.inf
+            else:
+                bucket = float(bucket)
+            samples = int(line.split()[-1])
+            buckets.setdefault(bucket, 0)
+            buckets[bucket] += samples
+
+        return buckets
+
+    def parse_latencies(self, buckets):
+        # Substract checkpoint values from previous samples
+        for latency, value in self._checkpoint_buckets.items():
+            buckets[latency] -= value
+
+        # Calculate derivative of cumulative function
+        # to get actual number of samples on each bucket
+        prev_value = 0
+        latencies = {}
+        for latency, value in buckets.items():
+            latencies[latency] = value - prev_value
+            prev_value = value
+        return latencies
 
     def get_latency_percentiles(self, percentiles: List[int]):
         """
         Calls kube-metrics-server endpoint and parses the apiserver request latency metric samples.
         From that, it calculates the specified percentiles.
         """
-        metric_prefix = "apiserver_request_duration_seconds"
-        output = self.poll_metrics(metric_prefix)
-        buckets = {}
-        total_count = 0
-        for line in output.split("\n"):
-            if metric_prefix not in line:
-                # Ignore
-                continue
-
-            if metric_prefix + "_bucket" in line:
-                bucket = line.split()[0].split("le=")[-1].strip('}"')
-                if bucket == "+Inf":
-                    bucket = math.inf
-                else:
-                    bucket = float(bucket)
-                samples = int(line.split()[-1])
-                buckets.setdefault(bucket, 0)
-                buckets[bucket] += samples
-
-            elif metric_prefix + "_count" in line:
-                count = int(line.split()[-1])
-                total_count += count
-
-        # Calculate derivative of cumulative function
-        prev_bucket = 0
-        latencies = {}
-        for bucket, value in buckets.items():
-            latencies[bucket] = value - prev_bucket
-            prev_bucket = value
+        metrics = self.poll_metrics()
+        buckets = self.get_buckets(metrics)
+        latencies = self.parse_latencies(buckets)
+        self._last_total_requests = sum(list(buckets.values()))
 
         # Simulate samples to calculate quantile
-        samples = []
-        for bucket, value in latencies.items():
-            values = [bucket] * value
-            samples.extend(values)
+        # {0.05: 2, 0.1: 3, 1: 2} -> [0.05, 0.05, 0.1, 0.1, 0.1, 1, 1]
+        samples = [
+            latency for latency, value in latencies.items() for _ in range(value)
+        ]
 
         # Return requested percentiles
-        sampled_percentiles = statistics.quantiles(samples, n=101)
+        sampled_percentiles = statistics.quantiles(samples, n=100)
+
         result = []
         for perc in percentiles:
-            value = round(sampled_percentiles[perc], 4)
+            index = perc - 1
+            value = round(sampled_percentiles[index], 4)
             result.append([perc, value])
+
         return result
 
+    @contextmanager
+    def sample_with_checkpoint(self):
+        self.checkpoint()
 
-@lru_cache(maxsize=1)
-def get_metric_server_ip(cluster: Microk8sCluster) -> str:
-    logging.info("Fetching metrics server service' ip")
-    command = "microk8s kubectl get svc -A | grep metrics-server | awk '{print $4}'"
-    resp = cluster.run_in_master_node(command)
-    resp.check_returncode()
-    ip = resp.stdout.decode().strip()
-    if ip is None:
-        raise ValueError("Could not find ip for metric server")
-    return ip
+        yield
+
+        self.sample()
